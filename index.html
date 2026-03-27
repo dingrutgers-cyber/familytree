@@ -626,46 +626,61 @@ textarea { resize: vertical; min-height: 68px; }
   <div class="auth-box">
     <div class="auth-seal"><div class="auth-seal-text">谱</div></div>
     <div class="auth-title">宗族家谱系统</div>
-    <div class="auth-sub">万世同源 · 血脉相承</div>
+    <div class="auth-sub" id="auth-clan-sub">万世同源 · 血脉相承</div>
 
-    <!-- Login form -->
-    <div id="login-form">
+    <!-- ── STATE: enter email ── -->
+    <div id="auth-state-email">
+      <div class="auth-field">
+        <label class="auth-label">你的邮箱地址</label>
+        <input type="email" class="auth-input" id="auth-email"
+               placeholder="name@example.com"
+               onkeydown="if(event.key==='Enter')sendMagicLink()">
+      </div>
+      <button class="btn-auth" onclick="sendMagicLink()" id="send-link-btn">
+        发送登录链接到邮箱
+      </button>
+      <div style="margin-top:14px;padding:12px;background:var(--bg2);border:1px solid var(--bg3);border-radius:8px;font-size:12px;color:var(--ink3);line-height:1.8">
+        <strong style="color:var(--ink2)">如何使用：</strong><br>
+        输入邮箱 → 点按钮 → 去邮箱点链接 → 自动登录<br>
+        <span style="color:var(--ink3)">首次使用会自动注册账号，无需单独注册</span>
+      </div>
+      <div style="margin-top:10px;text-align:center">
+        <a onclick="showPasswordLogin()" style="font-size:12px;color:var(--ink3);cursor:pointer;text-decoration:underline">已有密码？用密码登录</a>
+      </div>
+    </div>
+
+    <!-- ── STATE: link sent ── -->
+    <div id="auth-state-sent" style="display:none;text-align:center;padding:10px 0">
+      <div style="font-size:48px;margin-bottom:12px">📬</div>
+      <div style="font-family:var(--serif);font-size:16px;font-weight:600;color:var(--ink);margin-bottom:8px">登录链接已发送</div>
+      <div style="font-size:13px;color:var(--ink3);line-height:1.9;margin-bottom:16px">
+        请检查邮箱 <strong id="sent-email-display" style="color:var(--ink2)"></strong><br>
+        点击邮件中的链接即可自动登录<br>
+        <span style="font-size:11px">（没收到？检查垃圾邮件夹，或等30秒后重试）</span>
+      </div>
+      <button onclick="showEmailInput()" style="padding:9px 20px;background:var(--bg2);color:var(--ink2);border:1px solid var(--border);border-radius:8px;font-family:var(--serif);font-size:13px;cursor:pointer">← 重新输入邮箱</button>
+    </div>
+
+    <!-- ── STATE: password login (fallback) ── -->
+    <div id="auth-state-password" style="display:none">
       <div class="auth-field">
         <label class="auth-label">邮箱地址</label>
-        <input type="text" class="auth-input" id="login-email" placeholder="your@email.com">
+        <input type="email" class="auth-input" id="pw-email" placeholder="name@example.com">
       </div>
       <div class="auth-field">
         <label class="auth-label">密码</label>
-        <input type="text" class="auth-input" id="login-password" placeholder="请输入密码" style="-webkit-text-security:disc">
+        <input type="password" class="auth-input" id="pw-password" placeholder="你的密码"
+               onkeydown="if(event.key==='Enter')loginWithPassword()">
       </div>
-      <button class="btn-auth" onclick="loginWithPassword()">登 入 族 谱</button>
-      <div class="auth-divider"><span>或</span></div>
-      <button style="width:100%;padding:11px;background:var(--bg2);color:var(--ink2);border:1px solid var(--border);border-radius:12px;font-family:var(--serif);font-size:13px;cursor:pointer;letter-spacing:1px;transition:all .2s" onclick="loginWithOTP()">发送邮箱验证码登录（无需密码）</button>
-      <div class="auth-otp-info" id="otp-sent-info">
-        ✓ 验证码已发送至你的邮箱，请查收并输入验证码：
-        <input type="text" class="auth-input" id="otp-code" placeholder="6位验证码" style="margin-top:8px;letter-spacing:4px;font-size:16px;text-align:center">
-        <button class="btn-auth" style="margin-top:8px" onclick="verifyOTP()">验证并登入</button>
+      <button class="btn-auth" onclick="loginWithPassword()">登 入</button>
+      <div style="margin-top:10px;text-align:center">
+        <a onclick="showEmailInput()" style="font-size:12px;color:var(--ink3);cursor:pointer;text-decoration:underline">← 用邮箱链接登录（推荐）</a>
       </div>
-      <div class="auth-switch">没有账号？<a onclick="showRegister()">点此注册</a></div>
     </div>
 
-    <!-- Register form -->
-    <div id="register-form" style="display:none">
-      <div class="auth-field">
-        <label class="auth-label">邮箱地址</label>
-        <input type="text" class="auth-input" id="reg-email" placeholder="your@email.com">
-      </div>
-      <div class="auth-field">
-        <label class="auth-label">姓名</label>
-        <input type="text" class="auth-input" id="reg-name" placeholder="例：张明远">
-      </div>
-      <div class="auth-field">
-        <label class="auth-label">密码（至少6位）</label>
-        <input type="text" class="auth-input" id="reg-password" placeholder="设置登录密码" style="-webkit-text-security:disc">
-      </div>
-      <button class="btn-auth" onclick="register()">注 册 并 加 入</button>
-      <div class="auth-switch">已有账号？<a onclick="showLogin()">返回登录</a></div>
-    </div>
+    <!-- ── error message ── -->
+    <div id="auth-error" style="display:none;margin-top:12px;padding:10px 14px;background:rgba(155,40,40,.06);border:1px solid rgba(155,40,40,.25);border-radius:8px;font-size:12px;color:var(--red);line-height:1.7"></div>
+
   </div>
 </div>
 
@@ -1113,13 +1128,15 @@ function useDemoMode() {
 // ══════════════════════════════════════════════════════════
 //  AUTH
 // ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+//  AUTH — Magic Link only (works on GitHub Pages / any host)
+// ══════════════════════════════════════════════════════════
 async function checkExistingSession() {
   if (!db) return;
-  const { data: { session } } = await db.auth.getSession();
-  if (session) {
-    await setCurrentUser(session.user);
-    showApp();
-  }
+
+  // Handle magic link token in URL hash (user clicked link in email)
+  // Supabase v2 handles this automatically via onAuthStateChange,
+  // but we need to make sure we're listening before getSession
   db.auth.onAuthStateChange(async (event, session) => {
     if (event === 'SIGNED_IN' && session) {
       await setCurrentUser(session.user);
@@ -1128,61 +1145,87 @@ async function checkExistingSession() {
       currentUser = null;
       document.getElementById('app').style.display = 'none';
       document.getElementById('auth-screen').style.display = 'flex';
+      showEmailInput();
+    } else if (event === 'TOKEN_REFRESHED' && session) {
+      // stay logged in
     }
   });
+
+  // Check if already logged in
+  const { data: { session } } = await db.auth.getSession();
+  if (session) {
+    await setCurrentUser(session.user);
+    showApp();
+  }
 }
 
 async function setCurrentUser(user) {
-  const { data: profile } = await db.from('profiles').select('*').eq('id', user.id).single();
-  currentUser = {
-    id: user.id,
-    email: user.email,
-    displayName: profile?.display_name || user.email.split('@')[0],
-    role: profile?.role || 'member'
-  };
+  try {
+    const { data: profile } = await db.from('profiles').select('*').eq('id', user.id).single();
+    currentUser = {
+      id: user.id,
+      email: user.email,
+      displayName: profile?.display_name || user.email.split('@')[0],
+      role: profile?.role || 'member'
+    };
+  } catch(e) {
+    currentUser = {
+      id: user.id,
+      email: user.email,
+      displayName: user.email.split('@')[0],
+      role: 'member'
+    };
+  }
+}
+
+// Send magic link — works for both new and existing users
+async function sendMagicLink() {
+  const email = (document.getElementById('auth-email').value || '').trim();
+  if (!email || !email.includes('@')) {
+    showAuthError('请输入正确的邮箱地址');
+    return;
+  }
+
+  const btn = document.getElementById('send-link-btn');
+  btn.textContent = '发送中…';
+  btn.style.opacity = '0.7';
+  btn.disabled = true;
+  hideAuthError();
+
+  // emailRedirectTo must be the exact URL where the HTML file is hosted
+  const redirectTo = window.location.href.split('#')[0].split('?')[0];
+
+  const { error } = await db.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: redirectTo,
+      shouldCreateUser: true   // auto-creates account if new user
+    }
+  });
+
+  btn.textContent = '发送登录链接到邮箱';
+  btn.style.opacity = '1';
+  btn.disabled = false;
+
+  if (error) {
+    showAuthError('发送失败：' + error.message + '\n\n请确认 Supabase 设置中已开启 Email Auth。');
+    return;
+  }
+
+  // Show "check your email" state
+  document.getElementById('sent-email-display').textContent = email;
+  document.getElementById('auth-state-email').style.display = 'none';
+  document.getElementById('auth-state-sent').style.display = 'block';
 }
 
 async function loginWithPassword() {
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  if (!email || !password) { showSync('请填写邮箱和密码'); return; }
+  const email    = (document.getElementById('pw-email').value || '').trim();
+  const password = (document.getElementById('pw-password').value || '');
+  if (!email || !password) { showAuthError('请填写邮箱和密码'); return; }
+  hideAuthError();
   showSync('登录中…');
   const { error } = await db.auth.signInWithPassword({ email, password });
-  if (error) showSync('❌ 登录失败：' + error.message);
-}
-
-async function loginWithOTP() {
-  const email = document.getElementById('login-email').value.trim();
-  if (!email) { showSync('请先填写邮箱地址'); return; }
-  showSync('发送验证码中…');
-  const { error } = await db.auth.signInWithOtp({ email });
-  if (error) { showSync('❌ 发送失败：' + error.message); return; }
-  document.getElementById('otp-sent-info').style.display = 'block';
-  showSync('✓ 验证码已发送至 ' + email);
-}
-
-async function verifyOTP() {
-  const email = document.getElementById('login-email').value.trim();
-  const token = document.getElementById('otp-code').value.trim();
-  if (!token) { showSync('请输入验证码'); return; }
-  showSync('验证中…');
-  const { error } = await db.auth.verifyOtp({ email, token, type: 'email' });
-  if (error) showSync('❌ 验证失败：' + error.message);
-}
-
-async function register() {
-  const email = document.getElementById('reg-email').value.trim();
-  const name = document.getElementById('reg-name').value.trim();
-  const password = document.getElementById('reg-password').value;
-  if (!email || !name || !password) { showSync('请填写所有字段'); return; }
-  if (password.length < 6) { showSync('密码至少6位'); return; }
-  showSync('注册中…');
-  const { error } = await db.auth.signUp({
-    email, password,
-    options: { data: { display_name: name } }
-  });
-  if (error) { showSync('❌ 注册失败：' + error.message); return; }
-  showSync('✓ 注册成功，请检查邮箱验证后登录');
+  if (error) showAuthError('登录失败：' + error.message);
 }
 
 async function logout() {
@@ -1190,19 +1233,39 @@ async function logout() {
     isDemoMode = false; currentUser = null; members = []; photos = [];
     document.getElementById('app').style.display = 'none';
     document.getElementById('setup-screen').style.display = 'flex';
+    showSetupStep(1);
     return;
   }
   await db.auth.signOut();
 }
 
-function showLogin() {
-  document.getElementById('login-form').style.display = 'block';
-  document.getElementById('register-form').style.display = 'none';
+// Auth UI state helpers
+function showEmailInput() {
+  document.getElementById('auth-state-email').style.display = 'block';
+  document.getElementById('auth-state-sent').style.display = 'none';
+  document.getElementById('auth-state-password').style.display = 'none';
+  hideAuthError();
 }
-function showRegister() {
-  document.getElementById('login-form').style.display = 'none';
-  document.getElementById('register-form').style.display = 'block';
+function showPasswordLogin() {
+  document.getElementById('auth-state-email').style.display = 'none';
+  document.getElementById('auth-state-sent').style.display = 'none';
+  document.getElementById('auth-state-password').style.display = 'block';
+  hideAuthError();
 }
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+function hideAuthError() {
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+// Legacy stubs (keep so nothing breaks)
+function showLogin()    { showEmailInput(); }
+function showRegister() { showEmailInput(); }
+function loginWithOTP() { sendMagicLink(); }
+async function register() { sendMagicLink(); }
+async function verifyOTP() {}
 
 // ══════════════════════════════════════════════════════════
 //  SHOW APP
@@ -1212,6 +1275,22 @@ function showApp() {
   document.getElementById('app').style.display = 'block';
   updateUserUI();
   loadAllData();
+  // If display name looks like an email fragment, prompt user to set their real name
+  if (currentUser && currentUser.displayName === currentUser.email.split('@')[0]) {
+    setTimeout(() => promptDisplayName(), 1000);
+  }
+}
+
+function promptDisplayName() {
+  const name = prompt('欢迎加入族谱！\n\n请输入你的姓名（如：张明远），方便族人认识你：');
+  if (name && name.trim() && db) {
+    const trimmed = name.trim();
+    currentUser.displayName = trimmed;
+    updateUserUI();
+    db.from('profiles').update({ display_name: trimmed }).eq('id', currentUser.id).then(() => {
+      showSync('✓ 姓名已保存：' + trimmed);
+    });
+  }
 }
 
 function updateUserUI() {
