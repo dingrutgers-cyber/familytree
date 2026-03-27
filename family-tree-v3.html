@@ -1,0 +1,1763 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>宗族家谱系统</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --ink: #1a1209;
+  --ink2: #3d2e1a;
+  --ink3: #6b5540;
+  --gold: #c8882a;
+  --gold2: #e6b060;
+  --gold3: #f5d99a;
+  --red: #9b2828;
+  --green: #1a6030;
+  --bg: #fdf8f0;
+  --bg2: #f7efe0;
+  --bg3: #ede0c8;
+  --border: #d4b896;
+  --border2: #c4a070;
+  --serif: 'Noto Serif SC', serif;
+  --sans: 'Noto Sans SC', sans-serif;
+  --shadow: 0 2px 12px rgba(100,60,0,.10);
+  --shadow2: 0 4px 24px rgba(100,60,0,.18);
+}
+
+body { font-family: var(--sans); background: var(--bg); color: var(--ink); min-height: 100vh; }
+
+/* ── SETUP SCREEN ── */
+#setup-screen {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #1a0e05 0%, #2c1a08 60%, #3d2410 100%);
+  padding: 20px;
+  position: relative; overflow: hidden;
+}
+#setup-screen::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 32px, rgba(200,136,42,.05) 32px, rgba(200,136,42,.05) 33px),
+    repeating-linear-gradient(90deg, transparent, transparent 32px, rgba(200,136,42,.05) 32px, rgba(200,136,42,.05) 33px);
+}
+.setup-box {
+  background: rgba(253,248,240,.97);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  padding: 48px 40px;
+  max-width: 480px; width: 100%;
+  box-shadow: 0 24px 80px rgba(0,0,0,.4);
+  position: relative; z-index: 1;
+}
+.setup-seal {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 20px;
+  background: linear-gradient(135deg, #1a0e05, #3d2410);
+  position: relative;
+}
+.setup-seal::before {
+  content: ''; position: absolute; inset: 4px;
+  border: 1px solid rgba(200,136,42,.5); border-radius: 50%;
+}
+.setup-seal-text { font-family: var(--serif); font-size: 26px; color: var(--gold3); font-weight: 700; letter-spacing: 3px; }
+.setup-title { font-family: var(--serif); font-size: 24px; font-weight: 700; color: var(--ink); text-align: center; letter-spacing: 4px; margin-bottom: 6px; }
+.setup-sub { font-size: 12px; color: var(--ink3); text-align: center; letter-spacing: 2px; margin-bottom: 32px; }
+.setup-step { margin-bottom: 28px; }
+.setup-step-title { font-family: var(--serif); font-size: 13px; font-weight: 600; color: var(--ink2); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.step-badge {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: linear-gradient(135deg, #2c1a08, #3d2410);
+  color: var(--gold2); font-size: 11px;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;
+}
+.setup-input {
+  width: 100%; padding: 10px 14px;
+  border: 1px solid var(--border); border-radius: 10px;
+  font-size: 13px; font-family: var(--sans);
+  background: var(--bg); color: var(--ink);
+  outline: none; transition: all .2s;
+  margin-bottom: 8px;
+}
+.setup-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(200,136,42,.12); background: white; }
+.setup-hint { font-size: 11px; color: var(--ink3); line-height: 1.7; padding: 10px 12px; background: var(--bg2); border-radius: 8px; border: 1px solid var(--bg3); }
+.setup-hint code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-size: 11px; font-family: monospace; color: var(--ink2); }
+.btn-setup {
+  width: 100%; padding: 13px;
+  background: linear-gradient(135deg, #2c1a08, #3d2410);
+  color: var(--gold2); font-family: var(--serif); font-size: 15px;
+  font-weight: 600; letter-spacing: 2px;
+  border: 1px solid var(--gold); border-radius: 12px;
+  cursor: pointer; transition: all .2s; margin-top: 8px;
+}
+.btn-setup:hover { background: linear-gradient(135deg, #3d2410, #5a3518); box-shadow: 0 4px 20px rgba(200,136,42,.3); }
+.setup-demo-link { text-align: center; margin-top: 16px; font-size: 12px; color: var(--ink3); }
+.setup-demo-link a { color: var(--gold); cursor: pointer; text-decoration: underline; }
+
+/* ── AUTH SCREEN ── */
+#auth-screen {
+  min-height: 100vh;
+  display: none; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #1a0e05 0%, #2c1a08 60%, #3d2410 100%);
+  padding: 20px; position: relative; overflow: hidden;
+}
+#auth-screen::before {
+  content: ''; position: absolute; inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 32px, rgba(200,136,42,.05) 32px, rgba(200,136,42,.05) 33px),
+    repeating-linear-gradient(90deg, transparent, transparent 32px, rgba(200,136,42,.05) 32px, rgba(200,136,42,.05) 33px);
+}
+.auth-box {
+  background: rgba(253,248,240,.97);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  padding: 48px 40px;
+  max-width: 400px; width: 100%;
+  box-shadow: 0 24px 80px rgba(0,0,0,.4);
+  position: relative; z-index: 1;
+}
+.auth-seal {
+  width: 68px; height: 68px; border-radius: 50%;
+  border: 2px solid var(--gold);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 18px;
+  background: linear-gradient(135deg, #1a0e05, #3d2410);
+  position: relative;
+}
+.auth-seal::before { content: ''; position: absolute; inset: 4px; border: 1px solid rgba(200,136,42,.5); border-radius: 50%; }
+.auth-seal-text { font-family: var(--serif); font-size: 24px; color: var(--gold3); font-weight: 700; letter-spacing: 2px; }
+.auth-title { font-family: var(--serif); font-size: 22px; font-weight: 700; color: var(--ink); text-align: center; letter-spacing: 4px; margin-bottom: 4px; }
+.auth-sub { font-size: 12px; color: var(--ink3); text-align: center; letter-spacing: 1px; margin-bottom: 28px; }
+.auth-field { margin-bottom: 14px; }
+.auth-label { font-size: 11px; color: var(--ink3); font-weight: 500; letter-spacing: .5px; margin-bottom: 5px; display: block; }
+.auth-input {
+  width: 100%; padding: 11px 14px;
+  border: 1px solid var(--border); border-radius: 10px;
+  font-size: 14px; font-family: var(--sans);
+  background: var(--bg); color: var(--ink);
+  outline: none; transition: all .2s;
+}
+.auth-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(200,136,42,.12); background: white; }
+.btn-auth {
+  width: 100%; padding: 13px;
+  background: linear-gradient(135deg, #2c1a08, #3d2410);
+  color: var(--gold2); font-family: var(--serif); font-size: 15px;
+  font-weight: 600; letter-spacing: 2px;
+  border: 1px solid var(--gold); border-radius: 12px;
+  cursor: pointer; transition: all .2s; margin-top: 4px;
+}
+.btn-auth:hover { background: linear-gradient(135deg, #3d2410, #5a3518); box-shadow: 0 4px 20px rgba(200,136,42,.3); }
+.auth-switch { text-align: center; margin-top: 16px; font-size: 12px; color: var(--ink3); }
+.auth-switch a { color: var(--gold); cursor: pointer; text-decoration: underline; }
+.auth-otp-info { background: rgba(200,136,42,.08); border: 1px solid rgba(200,136,42,.25); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: var(--ink3); margin-top: 10px; line-height: 1.7; display: none; }
+.auth-divider { display: flex; align-items: center; gap: 10px; margin: 16px 0; }
+.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--bg3); }
+.auth-divider span { font-size: 11px; color: var(--ink3); }
+
+/* ── MAIN APP ── */
+#app { display: none; min-height: 100vh; }
+
+/* HEADER */
+.header {
+  background: linear-gradient(135deg, #1a0e05 0%, #2c1a08 60%, #3d2410 100%);
+  position: relative; overflow: hidden;
+}
+.header::before {
+  content: ''; position: absolute; inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(200,136,42,.06) 28px, rgba(200,136,42,.06) 29px),
+    repeating-linear-gradient(90deg, transparent, transparent 28px, rgba(200,136,42,.06) 28px, rgba(200,136,42,.06) 29px);
+}
+.header-inner {
+  position: relative; padding: 20px 28px 16px;
+  display: flex; align-items: center; gap: 16px;
+}
+.header-seal {
+  width: 52px; height: 52px; border-radius: 50%;
+  border: 2px solid var(--gold);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; position: relative;
+}
+.header-seal::before { content: ''; position: absolute; inset: 3px; border: 1px solid rgba(200,136,42,.4); border-radius: 50%; }
+.seal-text { font-family: var(--serif); font-size: 18px; color: var(--gold); font-weight: 700; letter-spacing: 2px; }
+.header-title h1 { font-family: var(--serif); font-size: 20px; color: #f5d99a; font-weight: 600; letter-spacing: 4px; }
+.header-title p { font-size: 10px; color: rgba(200,136,42,.7); letter-spacing: 2px; margin-top: 2px; }
+.header-right {
+  margin-left: auto; display: flex; align-items: center; gap: 16px;
+}
+.header-stats { display: flex; gap: 16px; }
+.stat-item { text-align: center; border-left: 1px solid rgba(200,136,42,.3); padding-left: 14px; }
+.stat-num { font-family: var(--serif); font-size: 18px; color: var(--gold2); font-weight: 600; }
+.stat-label { font-size: 9px; color: rgba(245,217,154,.6); letter-spacing: 1px; }
+
+.user-badge {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px 6px 8px;
+  background: rgba(200,136,42,.12);
+  border: 1px solid rgba(200,136,42,.3);
+  border-radius: 20px; cursor: pointer;
+  transition: all .2s;
+}
+.user-badge:hover { background: rgba(200,136,42,.2); }
+.user-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(135deg, #2c1a08, var(--gold));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-size: 12px; color: var(--gold3); font-weight: 700;
+}
+.user-name { font-size: 12px; color: var(--gold2); font-family: var(--serif); letter-spacing: .5px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-role { font-size: 9px; color: rgba(200,136,42,.6); margin-left: 2px; }
+.btn-logout {
+  padding: 5px 12px; border-radius: 8px;
+  border: 1px solid rgba(200,136,42,.3);
+  background: transparent; color: rgba(245,217,154,.7);
+  font-size: 11px; font-family: var(--serif); cursor: pointer;
+  transition: all .2s;
+}
+.btn-logout:hover { background: rgba(155,40,40,.2); color: #ff9999; border-color: rgba(155,40,40,.4); }
+
+/* NAV */
+.nav-tabs {
+  background: #221408; display: flex;
+  border-bottom: 1px solid rgba(200,136,42,.2);
+  padding: 0 28px; overflow-x: auto;
+}
+.nav-tab {
+  padding: 10px 16px; font-size: 12px;
+  color: rgba(245,217,154,.5); cursor: pointer;
+  letter-spacing: 1px; border-bottom: 2px solid transparent;
+  transition: all .2s; font-family: var(--serif); white-space: nowrap;
+}
+.nav-tab:hover { color: var(--gold2); }
+.nav-tab.active { color: var(--gold2); border-bottom-color: var(--gold); }
+
+/* MAIN */
+.main { padding: 24px 28px; max-width: 1100px; margin: 0 auto; }
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* CARD */
+.card {
+  background: white; border: 1px solid var(--border);
+  border-radius: 12px; padding: 22px;
+  box-shadow: var(--shadow); margin-bottom: 18px;
+}
+.card-title {
+  font-family: var(--serif); font-size: 15px; font-weight: 600;
+  color: var(--ink2); margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card-title::before { content: ''; width: 3px; height: 15px; background: var(--gold); border-radius: 2px; flex-shrink: 0; }
+
+/* FORM */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group.full { grid-column: 1/-1; }
+label { font-size: 11px; color: var(--ink3); letter-spacing: .5px; font-weight: 500; }
+input[type=text], select, textarea {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 11px; font-size: 13px; font-family: var(--sans);
+  color: var(--ink); background: var(--bg);
+  transition: border-color .2s, box-shadow .2s; outline: none; width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--gold); box-shadow: 0 0 0 3px rgba(200,136,42,.12); background: white;
+}
+textarea { resize: vertical; min-height: 68px; }
+
+/* BUTTONS */
+.btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 9px 18px; border-radius: 8px;
+  font-size: 12px; font-family: var(--serif);
+  letter-spacing: .5px; cursor: pointer;
+  transition: all .18s; border: none; font-weight: 500;
+}
+.btn-primary { background: linear-gradient(135deg, #2c1a08, #3d2410); color: var(--gold2); border: 1px solid var(--gold); }
+.btn-primary:hover { background: linear-gradient(135deg, #3d2410, #5a3518); box-shadow: 0 2px 12px rgba(200,136,42,.25); }
+.btn-secondary { background: var(--bg2); color: var(--ink2); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--bg3); }
+.btn-danger { background: rgba(155,40,40,.08); color: var(--red); border: 1px solid rgba(155,40,40,.25); }
+.btn-danger:hover { background: rgba(155,40,40,.15); }
+.btn-success { background: rgba(26,96,48,.08); color: var(--green); border: 1px solid rgba(26,96,48,.3); }
+.btn-success:hover { background: rgba(26,96,48,.15); }
+.btn-row { display: flex; gap: 8px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+
+/* PERMISSION BADGE */
+.perm-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 4px;
+  font-size: 10px; font-weight: 500; font-family: var(--sans);
+}
+.perm-mine { background: rgba(26,96,48,.1); color: var(--green); border: 1px solid rgba(26,96,48,.25); }
+.perm-others { background: rgba(100,60,0,.08); color: var(--ink3); border: 1px solid var(--bg3); }
+.perm-admin { background: rgba(200,136,42,.12); color: #7a5010; border: 1px solid rgba(200,136,42,.3); }
+
+/* MEMBER GRID */
+.member-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.member-card {
+  background: white; border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px; cursor: pointer;
+  transition: all .2s; position: relative; overflow: hidden;
+}
+.member-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 3px; background: linear-gradient(90deg, var(--gold), var(--gold2));
+  transform: scaleX(0); transition: transform .2s; transform-origin: left;
+}
+.member-card.is-mine::before { transform: scaleX(1); }
+.member-card:hover { box-shadow: var(--shadow2); border-color: var(--gold2); transform: translateY(-2px); }
+.member-card:hover::before { transform: scaleX(1); }
+.member-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-size: 16px; font-weight: 600;
+  margin-bottom: 9px; overflow: hidden; flex-shrink: 0;
+}
+.member-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-male { background: rgba(50,80,150,.1); color: #2a4a8a; border: 1px solid rgba(50,80,150,.2); }
+.avatar-female { background: rgba(155,40,80,.1); color: #8a2a50; border: 1px solid rgba(155,40,80,.2); }
+.member-name { font-family: var(--serif); font-size: 14px; font-weight: 600; color: var(--ink); }
+.member-info { font-size: 11px; color: var(--ink3); margin-top: 3px; line-height: 1.5; }
+.member-badge { display: inline-block; padding: 2px 7px; border-radius: 20px; font-size: 10px; margin-top: 7px; font-weight: 500; }
+.badge-gen { background: rgba(200,136,42,.12); color: #7a5010; border: 1px solid rgba(200,136,42,.3); }
+.delete-btn {
+  position: absolute; top: 8px; right: 8px;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid rgba(155,40,40,.25);
+  background: rgba(155,40,40,.06); color: var(--red);
+  font-size: 11px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .2s; z-index: 2;
+}
+.member-card:hover .delete-btn { opacity: 1; }
+.delete-btn:hover { background: rgba(155,40,40,.2); }
+
+/* SEARCH */
+.search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+.search-bar input {
+  flex: 1; padding: 9px 14px;
+  border: 1px solid var(--border2);
+  border-radius: 10px; font-size: 13px; background: white; outline: none;
+  transition: border-color .2s;
+}
+.search-bar input:focus { border-color: var(--gold); }
+.search-icon {
+  background: var(--gold); color: white; border: none;
+  border-radius: 10px; padding: 9px 14px; cursor: pointer; font-size: 13px;
+}
+
+/* TREE */
+.tree-container { background: white; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+.tree-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 18px; border-bottom: 1px solid var(--bg3);
+  background: var(--bg2); flex-wrap: wrap;
+}
+.tree-toolbar h3 { font-family: var(--serif); font-size: 13px; color: var(--ink2); flex: 1; }
+.zoom-btn {
+  width: 28px; height: 28px; border: 1px solid var(--border);
+  border-radius: 6px; background: white; cursor: pointer;
+  font-size: 14px; display: flex; align-items: center; justify-content: center;
+  transition: all .15s; color: var(--ink2);
+}
+.zoom-btn:hover { background: var(--bg3); border-color: var(--gold); }
+#tree-svg-wrap { padding: 24px; overflow: auto; min-height: 300px; }
+
+/* PHOTOS */
+.photo-upload-zone {
+  border: 2px dashed var(--border2); border-radius: 12px;
+  padding: 32px 20px; text-align: center; cursor: pointer;
+  transition: all .2s; background: var(--bg2); position: relative;
+}
+.photo-upload-zone:hover { border-color: var(--gold); background: rgba(200,136,42,.04); }
+.photo-upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.upload-icon { font-size: 32px; margin-bottom: 8px; }
+.upload-text { font-family: var(--serif); font-size: 14px; color: var(--ink2); margin-bottom: 3px; }
+.upload-sub { font-size: 12px; color: var(--ink3); }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 16px; }
+.photo-item { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: var(--bg2); aspect-ratio: 1; }
+.photo-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-overlay { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(20,10,2,.8)); padding: 6px 8px; }
+.photo-name { font-size: 10px; color: #f5d99a; font-family: var(--serif); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.photo-gen { font-size: 9px; color: rgba(245,217,154,.7); }
+.photo-del { position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; border-radius: 50%; background: rgba(155,40,40,.8); color: white; border: none; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .2s; }
+.photo-item:hover .photo-del { opacity: 1; }
+.photo-assign { position: absolute; top: 5px; left: 5px; }
+.photo-assign select { font-size: 9px; padding: 2px 4px; border-radius: 4px; border: 1px solid rgba(200,136,42,.5); background: rgba(20,10,2,.7); color: #f5d99a; cursor: pointer; max-width: 80px; }
+
+/* PREFACE */
+.preface-preview {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 24px;
+  font-family: var(--serif); font-size: 14px;
+  line-height: 2.2; color: var(--ink2);
+  white-space: pre-wrap; letter-spacing: .5px; min-height: 120px;
+}
+.preface-preview.empty { color: var(--ink3); font-style: italic; font-size: 13px; }
+
+/* PDF */
+.pdf-preview-box {
+  background: linear-gradient(135deg, #1a0e05, #2c1a08);
+  border-radius: 12px; padding: 24px;
+  color: var(--gold3); font-family: var(--serif);
+  text-align: center; position: relative; overflow: hidden;
+}
+.pdf-preview-box::before {
+  content: ''; position: absolute; inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 20px, rgba(200,136,42,.04) 20px, rgba(200,136,42,.04) 21px),
+    repeating-linear-gradient(90deg, transparent, transparent 20px, rgba(200,136,42,.04) 20px, rgba(200,136,42,.04) 21px);
+}
+.pdf-icon { font-size: 44px; margin-bottom: 10px; position: relative; z-index: 1; }
+.pdf-title { font-size: 18px; font-weight: 600; letter-spacing: 3px; margin-bottom: 4px; position: relative; z-index: 1; }
+.pdf-sub { font-size: 12px; color: rgba(200,136,42,.7); letter-spacing: 2px; position: relative; z-index: 1; }
+.pdf-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; }
+.pdf-option { background: white; border: 1px solid var(--border); border-radius: 10px; padding: 14px; cursor: pointer; transition: all .18s; }
+.pdf-option:hover { border-color: var(--gold2); }
+.pdf-option.selected { border-color: var(--gold); background: rgba(200,136,42,.05); }
+.pdf-option-title { font-family: var(--serif); font-size: 13px; font-weight: 600; color: var(--ink2); margin-bottom: 4px; }
+.pdf-option-desc { font-size: 11px; color: var(--ink3); line-height: 1.6; }
+
+/* PERMISSION INFO */
+.perm-info {
+  padding: 12px 16px; border-radius: 10px;
+  background: rgba(200,136,42,.06); border: 1px solid rgba(200,136,42,.2);
+  font-size: 12px; color: var(--ink3); line-height: 1.8; margin-bottom: 16px;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.perm-info-icon { font-size: 16px; flex-shrink: 0; margin-top: 2px; }
+
+/* SYNC STATUS */
+.sync-bar {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: #2c1a08; color: var(--gold2);
+  padding: 8px 20px; border-radius: 20px;
+  font-size: 12px; font-family: var(--serif);
+  border: 1px solid var(--gold); letter-spacing: .5px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.3);
+  transition: all .3s; opacity: 0; z-index: 200;
+  white-space: nowrap;
+}
+.sync-bar.show { opacity: 1; }
+
+/* MODAL */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  z-index: 100; display: none;
+  align-items: center; justify-content: center; padding: 20px;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--bg); border: 1px solid var(--border2);
+  border-radius: 16px; max-width: 560px; width: 100%;
+  max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 16px 60px rgba(0,0,0,.35);
+}
+.modal-header {
+  display: flex; align-items: center;
+  padding: 18px 22px 14px; border-bottom: 1px solid var(--bg3);
+}
+.modal-header h3 { font-family: var(--serif); font-size: 16px; color: var(--ink); flex: 1; }
+.modal-close {
+  width: 26px; height: 26px; border-radius: 6px;
+  border: 1px solid var(--border); background: white;
+  cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center;
+  color: var(--ink3); transition: all .15s;
+}
+.modal-close:hover { background: var(--bg3); color: var(--red); }
+.modal-body { padding: 18px 22px 22px; }
+
+/* LOADING */
+.loading {
+  display: flex; align-items: center; justify-content: center;
+  padding: 48px 20px; gap: 12px;
+  font-family: var(--serif); font-size: 14px; color: var(--ink3);
+  letter-spacing: 1px;
+}
+.loading-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--gold); animation: pulse 1.2s ease-in-out infinite;
+}
+.loading-dot:nth-child(2) { animation-delay: .2s; }
+.loading-dot:nth-child(3) { animation-delay: .4s; }
+@keyframes pulse { 0%,80%,100%{transform:scale(0.6);opacity:.4} 40%{transform:scale(1);opacity:1} }
+
+/* EMPTY */
+.empty-state { text-align: center; padding: 40px 20px; color: var(--ink3); }
+.empty-state .empty-icon { font-size: 40px; margin-bottom: 10px; }
+.empty-state h3 { font-family: var(--serif); font-size: 15px; color: var(--ink2); margin-bottom: 7px; }
+.empty-state p { font-size: 12px; line-height: 1.7; }
+
+.divider { height: 1px; background: var(--bg3); margin: 18px 0; }
+.section-title { font-family: var(--serif); font-size: 13px; color: var(--ink3); letter-spacing: 1px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.section-title::after { content: ''; flex: 1; height: 1px; background: var(--bg3); }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     SETUP SCREEN (first-time configuration)
+════════════════════════════════════════════ -->
+<div id="setup-screen">
+  <div class="setup-box" style="max-width:560px">
+    <div class="setup-seal"><div class="setup-seal-text">谱</div></div>
+    <div class="setup-title">宗族家谱系统</div>
+    <div class="setup-sub">首次使用 · 三步完成云端配置</div>
+
+    <!-- STEP TABS -->
+    <div style="display:flex;gap:0;margin-bottom:20px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      <div id="tab1" onclick="showSetupStep(1)" style="flex:1;padding:10px 6px;text-align:center;font-family:var(--serif);font-size:12px;cursor:pointer;background:linear-gradient(135deg,#2c1a08,#3d2410);color:var(--gold2);border-right:1px solid var(--border);letter-spacing:.5px">① 建数据库</div>
+      <div id="tab2" onclick="showSetupStep(2)" style="flex:1;padding:10px 6px;text-align:center;font-family:var(--serif);font-size:12px;cursor:pointer;background:var(--bg2);color:var(--ink3);border-right:1px solid var(--border);letter-spacing:.5px">② 复制密钥</div>
+      <div id="tab3" onclick="showSetupStep(3)" style="flex:1;padding:10px 6px;text-align:center;font-family:var(--serif);font-size:12px;cursor:pointer;background:var(--bg2);color:var(--ink3);letter-spacing:.5px">③ 连接完成</div>
+    </div>
+
+    <!-- STEP 1: 建数据库 -->
+    <div id="setup-step-1">
+      <div style="font-family:var(--serif);font-size:14px;font-weight:600;color:var(--ink2);margin-bottom:14px">在 Supabase 建立数据库（免费）</div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px;background:var(--bg2);border-radius:8px;border:1px solid var(--bg3)">
+          <div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#2c1a08,#3d2410);color:var(--gold2);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">1</div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--ink2);margin-bottom:3px">打开 Supabase 官网注册免费账号</div>
+            <div style="font-size:12px;color:var(--ink3)">在浏览器打开：<code style="background:var(--bg3);padding:2px 6px;border-radius:4px;font-size:11px">supabase.com</code> → 点 Start your project → GitHub 登录最方便</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px;background:var(--bg2);border-radius:8px;border:1px solid var(--bg3)">
+          <div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#2c1a08,#3d2410);color:var(--gold2);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">2</div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--ink2);margin-bottom:3px">新建项目</div>
+            <div style="font-size:12px;color:var(--ink3)">登录后点 <code style="background:var(--bg3);padding:2px 6px;border-radius:4px;font-size:11px">New project</code> → 填入项目名称（如"家谱"）→ 设置数据库密码 → 选择离你最近的服务器地区 → Create project（等约1分钟）</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px;background:var(--bg2);border-radius:8px;border:1px solid var(--bg3)">
+          <div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#2c1a08,#3d2410);color:var(--gold2);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">3</div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--ink2);margin-bottom:3px">初始化数据库表（只做一次）</div>
+            <div style="font-size:12px;color:var(--ink3);margin-bottom:8px">进入项目后，左侧菜单点 <code style="background:var(--bg3);padding:2px 6px;border-radius:4px;font-size:11px">SQL Editor</code> → 点 <code style="background:var(--bg3);padding:2px 6px;border-radius:4px;font-size:11px">New query</code> → 粘贴下面的 SQL → 点 Run</div>
+            <button onclick="copyInitSQL()" style="padding:8px 16px;background:linear-gradient(135deg,#2c1a08,#3d2410);color:var(--gold2);border:1px solid var(--gold);border-radius:8px;font-family:var(--serif);font-size:12px;cursor:pointer;letter-spacing:.5px">📋 复制初始化 SQL（点这里）</button>
+            <div id="sql-copied" style="display:none;margin-top:6px;font-size:11px;color:#1a6030;font-weight:600">✓ 已复制！请粘贴到 Supabase SQL Editor 中执行</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-setup" style="margin-top:18px" onclick="showSetupStep(2)">数据库已建好 → 下一步</button>
+      <div style="text-align:center;margin-top:10px"><a onclick="useDemoMode()" style="font-size:12px;color:var(--ink3);cursor:pointer;text-decoration:underline">先用演示模式体验（不需要 Supabase）</a></div>
+    </div>
+
+    <!-- STEP 2: 复制密钥 -->
+    <div id="setup-step-2" style="display:none">
+      <div style="font-family:var(--serif);font-size:14px;font-weight:600;color:var(--ink2);margin-bottom:14px">从 Supabase 复制两个值</div>
+
+      <!-- Visual guide -->
+      <div style="background:#0d1117;border-radius:10px;padding:16px;margin-bottom:14px;font-family:monospace;font-size:11px;line-height:1.9;border:1px solid #30363d">
+        <div style="color:#8b949e;margin-bottom:8px">在 Supabase 中：你的项目 → Settings（左侧） → API</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px;background:#161b22;border-radius:6px;margin-bottom:6px">
+          <div style="width:10px;height:10px;border-radius:50%;background:#3fb950;flex-shrink:0"></div>
+          <div style="color:#79c0ff">Project URL</div>
+          <div style="color:#8b949e;margin-left:4px">（复制这个 → 粘贴到下方第①格）</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px;background:#161b22;border-radius:6px">
+          <div style="width:10px;height:10px;border-radius:50%;background:#3fb950;flex-shrink:0"></div>
+          <div style="color:#79c0ff">anon public</div>
+          <div style="color:#8b949e;margin-left:4px">（复制这个 → 粘贴到下方第②格）</div>
+        </div>
+        <div style="color:#8b949e;margin-top:8px;font-size:10px">注意：复制 anon public，不是 service_role（那个是管理员密钥，不要用）</div>
+      </div>
+
+      <div class="setup-step" style="margin-bottom:12px">
+        <div class="setup-step-title">
+          <div class="step-badge">①</div>
+          Project URL（项目地址）
+        </div>
+        <input type="text" class="setup-input" id="supabase-url" placeholder="https://xxxxxxxxxxxx.supabase.co" oninput="validateSetupInputs()">
+        <div id="url-ok" style="display:none;font-size:11px;color:#1a6030;margin-top:3px">✓ 格式正确</div>
+        <div id="url-err" style="display:none;font-size:11px;color:#9b2828;margin-top:3px">✗ 应该以 https:// 开头</div>
+      </div>
+
+      <div class="setup-step">
+        <div class="setup-step-title">
+          <div class="step-badge">②</div>
+          anon public 密钥
+        </div>
+        <input type="text" class="setup-input" id="supabase-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." oninput="validateSetupInputs()">
+        <div id="key-ok" style="display:none;font-size:11px;color:#1a6030;margin-top:3px">✓ 格式正确</div>
+        <div id="key-err" style="display:none;font-size:11px;color:#9b2828;margin-top:3px">✗ 应该以 eyJ 开头</div>
+      </div>
+
+      <button id="connect-btn" class="btn-setup" style="margin-top:18px;opacity:.5;cursor:not-allowed" onclick="saveConfig()">连接数据库</button>
+      <div style="text-align:center;margin-top:8px">
+        <a onclick="showSetupStep(1)" style="font-size:12px;color:var(--ink3);cursor:pointer;text-decoration:underline">← 返回上一步</a>
+      </div>
+    </div>
+
+    <!-- STEP 3: 完成 -->
+    <div id="setup-step-3" style="display:none;text-align:center;padding:20px 0">
+      <div style="font-size:48px;margin-bottom:16px">✓</div>
+      <div style="font-family:var(--serif);font-size:18px;font-weight:600;color:#1a6030;margin-bottom:8px;letter-spacing:2px">连接成功</div>
+      <div style="font-size:13px;color:var(--ink3);line-height:1.8">正在跳转至登录页面…<br>之后把这个 HTML 文件发给族人<br>大家用各自的账号登录即可</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     AUTH SCREEN
+════════════════════════════════════════════ -->
+<div id="auth-screen">
+  <div class="auth-box">
+    <div class="auth-seal"><div class="auth-seal-text">谱</div></div>
+    <div class="auth-title">宗族家谱系统</div>
+    <div class="auth-sub">万世同源 · 血脉相承</div>
+
+    <!-- Login form -->
+    <div id="login-form">
+      <div class="auth-field">
+        <label class="auth-label">邮箱地址</label>
+        <input type="text" class="auth-input" id="login-email" placeholder="your@email.com">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">密码</label>
+        <input type="text" class="auth-input" id="login-password" placeholder="请输入密码" style="-webkit-text-security:disc">
+      </div>
+      <button class="btn-auth" onclick="loginWithPassword()">登 入 族 谱</button>
+      <div class="auth-divider"><span>或</span></div>
+      <button style="width:100%;padding:11px;background:var(--bg2);color:var(--ink2);border:1px solid var(--border);border-radius:12px;font-family:var(--serif);font-size:13px;cursor:pointer;letter-spacing:1px;transition:all .2s" onclick="loginWithOTP()">发送邮箱验证码登录（无需密码）</button>
+      <div class="auth-otp-info" id="otp-sent-info">
+        ✓ 验证码已发送至你的邮箱，请查收并输入验证码：
+        <input type="text" class="auth-input" id="otp-code" placeholder="6位验证码" style="margin-top:8px;letter-spacing:4px;font-size:16px;text-align:center">
+        <button class="btn-auth" style="margin-top:8px" onclick="verifyOTP()">验证并登入</button>
+      </div>
+      <div class="auth-switch">没有账号？<a onclick="showRegister()">点此注册</a></div>
+    </div>
+
+    <!-- Register form -->
+    <div id="register-form" style="display:none">
+      <div class="auth-field">
+        <label class="auth-label">邮箱地址</label>
+        <input type="text" class="auth-input" id="reg-email" placeholder="your@email.com">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">姓名</label>
+        <input type="text" class="auth-input" id="reg-name" placeholder="例：张明远">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">密码（至少6位）</label>
+        <input type="text" class="auth-input" id="reg-password" placeholder="设置登录密码" style="-webkit-text-security:disc">
+      </div>
+      <button class="btn-auth" onclick="register()">注 册 并 加 入</button>
+      <div class="auth-switch">已有账号？<a onclick="showLogin()">返回登录</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MAIN APP
+════════════════════════════════════════════ -->
+<div id="app">
+  <div class="header">
+    <div class="header-inner">
+      <div class="header-seal"><div class="seal-text">谱</div></div>
+      <div class="header-title">
+        <h1 id="app-clan-title">宗族家谱系统</h1>
+        <p>万世同源 · 血脉相承 · 云端同步</p>
+      </div>
+      <div class="header-right">
+        <div class="header-stats">
+          <div class="stat-item"><div class="stat-num" id="total-members">0</div><div class="stat-label">族员</div></div>
+          <div class="stat-item"><div class="stat-num" id="total-gen">0</div><div class="stat-label">世代</div></div>
+          <div class="stat-item"><div class="stat-num" id="total-photos">0</div><div class="stat-label">照片</div></div>
+        </div>
+        <div class="user-badge" onclick="toggleUserMenu()">
+          <div class="user-avatar" id="user-avatar-text">张</div>
+          <div>
+            <div class="user-name" id="user-display-name">加载中…</div>
+            <div class="user-role" id="user-role-label">族员</div>
+          </div>
+        </div>
+        <button class="btn-logout" onclick="logout()">退出</button>
+      </div>
+    </div>
+    <div class="nav-tabs">
+      <div class="nav-tab active" onclick="switchTab('add')">✦ 录入族员</div>
+      <div class="nav-tab" onclick="switchTab('search')">⊙ 检索查询</div>
+      <div class="nav-tab" onclick="switchTab('tree')">❖ 族谱图谱</div>
+      <div class="nav-tab" onclick="switchTab('photos')">◉ 族员照片</div>
+      <div class="nav-tab" onclick="switchTab('preface')">卷 家族序言</div>
+      <div class="nav-tab" onclick="switchTab('pdf')">⬇ 导出PDF</div>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- ── 录入族员 ── -->
+    <div class="panel active" id="panel-add">
+      <div class="perm-info">
+        <div class="perm-info-icon">🔐</div>
+        <div>你只能<strong>修改或删除自己录入的记录</strong>（带金色顶栏标记）。其他族人录入的记录你可以查看，但无法修改。管理员可管理所有记录。</div>
+      </div>
+      <div class="card">
+        <div class="card-title">新增族员信息</div>
+        <div class="form-grid">
+          <div class="form-group"><label>姓名 *</label><input type="text" id="f-name" placeholder="例：张明远"></div>
+          <div class="form-group"><label>字号 / 谱名</label><input type="text" id="f-style" placeholder="例：明远、子涵"></div>
+          <div class="form-group"><label>性别 *</label><select id="f-gender"><option value="">— 请选择 —</option><option value="male">男</option><option value="female">女</option></select></div>
+          <div class="form-group"><label>出生年份</label><input type="text" id="f-birth" placeholder="例：1958"></div>
+          <div class="form-group"><label>出生地 / 祖籍</label><input type="text" id="f-hometown" placeholder="例：湖南省 长沙县 铜官镇"></div>
+          <div class="form-group"><label>现居地</label><input type="text" id="f-location" placeholder="例：广东省 深圳市"></div>
+          <div class="form-group"><label>父亲姓名</label><input type="text" id="f-father" placeholder="输入父亲姓名以建立关联"></div>
+          <div class="form-group"><label>配偶姓名</label><input type="text" id="f-spouse" placeholder="输入配偶姓名"></div>
+          <div class="form-group"><label>排行辈分</label><input type="text" id="f-generation" placeholder="例：第五世 / 仁字辈"></div>
+          <div class="form-group"><label>所属堂号 / 族系</label><input type="text" id="f-clan" placeholder="例：清河堂 / 陇西支系"></div>
+          <div class="form-group full"><label>职业 / 成就</label><input type="text" id="f-occupation" placeholder="例：农民、教师、企业家"></div>
+          <div class="form-group full"><label>备注 / 传记简述</label><textarea id="f-notes" placeholder="可填写人物事迹、迁徙记录、重要事件……"></textarea></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="addMember()">＋ 保存至云端</button>
+          <button class="btn btn-secondary" onclick="clearForm()">清空表单</button>
+        </div>
+      </div>
+      <div class="section-title">全族成员（金色顶栏 = 我录入的，可修改）</div>
+      <div class="member-grid" id="members-list">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div><span>正在连接云端…</span></div>
+      </div>
+    </div>
+
+    <!-- ── 检索查询 ── -->
+    <div class="panel" id="panel-search">
+      <div class="card">
+        <div class="card-title">族员检索</div>
+        <div class="search-bar">
+          <input type="text" id="search-input" placeholder="输入姓名、祖籍、字辈、堂号…" oninput="performSearch()">
+          <button class="search-icon" onclick="performSearch()">搜</button>
+        </div>
+        <div id="search-results" class="member-grid"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">关系链推导</div>
+        <div class="form-grid">
+          <div class="form-group"><label>族员甲</label><input type="text" id="rel-a" placeholder="输入姓名"></div>
+          <div class="form-group"><label>族员乙</label><input type="text" id="rel-b" placeholder="输入姓名"></div>
+        </div>
+        <div class="btn-row"><button class="btn btn-primary" onclick="computeRelation()">推算关系</button></div>
+        <div id="rel-result" style="margin-top:12px;display:none"></div>
+      </div>
+    </div>
+
+    <!-- ── 族谱图谱 ── -->
+    <div class="panel" id="panel-tree">
+      <div class="tree-container">
+        <div class="tree-toolbar">
+          <h3>族谱图谱（实时云端数据）</h3>
+          <button class="zoom-btn" onclick="treeZoom(1.2)">＋</button>
+          <button class="zoom-btn" onclick="treeZoom(0.83)">－</button>
+          <button class="zoom-btn" onclick="treeZoom(1)" style="font-size:10px;width:38px">重置</button>
+          <button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="renderTree()">刷新</button>
+        </div>
+        <div id="tree-svg-wrap"><svg id="tree-svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      </div>
+    </div>
+
+    <!-- ── 族员照片 ── -->
+    <div class="panel" id="panel-photos">
+      <div class="card">
+        <div class="card-title">上传族员照片</div>
+        <div class="photo-upload-zone">
+          <input type="file" accept="image/*" multiple onchange="handlePhotoUpload(event)">
+          <div class="upload-icon">📷</div>
+          <div class="upload-text">点击或拖拽上传族员照片</div>
+          <div class="upload-sub">支持 JPG、PNG、WEBP，可批量上传</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">排序方式</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-secondary" onclick="sortPhotos('generation')">按辈分</button>
+          <button class="btn btn-secondary" onclick="sortPhotos('birth')">按出生年</button>
+          <button class="btn btn-secondary" onclick="sortPhotos('name')">按姓名</button>
+        </div>
+      </div>
+      <div class="section-title">照片库</div>
+      <div class="photo-grid" id="photo-grid">
+        <div class="empty-state" style="grid-column:1/-1;padding:32px">
+          <div class="empty-icon">🖼️</div>
+          <h3>尚无照片</h3><p>上传后系统自动按辈分排列。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 家族序言 ── -->
+    <div class="panel" id="panel-preface">
+      <div class="card">
+        <div class="card-title">家族谱序 · 编写</div>
+        <div class="form-grid" style="margin-bottom:14px">
+          <div class="form-group"><label>家族名称</label><input type="text" id="pref-clan-name" placeholder="例：清河张氏" oninput="updatePreviewLive()"></div>
+          <div class="form-group"><label>编修年份</label><input type="text" id="pref-year" placeholder="例：2025年" oninput="updatePreviewLive()"></div>
+          <div class="form-group full"><label>始迁祖</label><input type="text" id="pref-ancestor" placeholder="例：始祖张德厚，清道光年间自湖南长沙迁居…" oninput="updatePreviewLive()"></div>
+        </div>
+        <div class="form-group">
+          <label>序言正文</label>
+          <textarea id="preface-text" style="min-height:180px;font-family:var(--serif);font-size:13px;line-height:2;letter-spacing:.5px" placeholder="盖闻水有源，树有根，人有祖…" oninput="updatePreviewLive()"></textarea>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="generateDefaultPreface()">✦ 自动生成草稿</button>
+          <button class="btn btn-primary" onclick="savePreface()">保存序言至云端</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">预览效果</div>
+        <div class="preface-preview" id="preface-preview"><span class="empty">序言将在此实时预览…</span></div>
+      </div>
+    </div>
+
+    <!-- ── 导出PDF ── -->
+    <div class="panel" id="panel-pdf">
+      <div class="pdf-preview-box">
+        <div class="pdf-icon">📜</div>
+        <div class="pdf-title" id="pdf-clan-preview">家族族谱</div>
+        <div class="pdf-sub" id="pdf-year-preview">点击下方按钮生成 PDF 副本</div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <div class="card-title">PDF 内容设置</div>
+        <div class="pdf-options">
+          <div class="pdf-option selected" id="opt-preface" onclick="togglePdfOpt(this)">
+            <div class="pdf-option-title">✦ 家族序言</div>
+            <div class="pdf-option-desc">家族介绍与编修说明，作为谱首第一页</div>
+          </div>
+          <div class="pdf-option selected" id="opt-list" onclick="togglePdfOpt(this)">
+            <div class="pdf-option-title">⊙ 族员名录</div>
+            <div class="pdf-option-desc">按辈分排列所有族员详细信息</div>
+          </div>
+          <div class="pdf-option selected" id="opt-tree" onclick="togglePdfOpt(this)">
+            <div class="pdf-option-title">❖ 世系关系</div>
+            <div class="pdf-option-desc">各族员父子传承关系说明</div>
+          </div>
+          <div class="pdf-option selected" id="opt-photos" onclick="togglePdfOpt(this)">
+            <div class="pdf-option-title">◉ 族员照片</div>
+            <div class="pdf-option-desc">按辈分排序的族员照片集锦</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="form-grid">
+          <div class="form-group"><label>家族名称</label><input type="text" id="pdf-clan-name" placeholder="例：清河张氏家谱" oninput="updatePdfPreview()"></div>
+          <div class="form-group"><label>版次说明</label><input type="text" id="pdf-edition" placeholder="例：二〇二五年续修本"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="generatePDF()">⬇ 生成并下载 PDF</button>
+        </div>
+        <div id="pdf-status" style="margin-top:10px;font-size:12px;color:var(--ink3)"></div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- MODAL -->
+<div class="modal-backdrop" id="modal-backdrop" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">族员详情</h3>
+      <button class="modal-close" onclick="document.getElementById('modal-backdrop').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- SYNC BAR -->
+<div class="sync-bar" id="sync-bar">正在同步…</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  CONFIG & SUPABASE INIT
+// ══════════════════════════════════════════════════════════
+let db = null;
+let currentUser = null;
+let members = [];
+let photos = [];
+let prefaceData = { clanName:'', year:'', ancestor:'', text:'' };
+let treeScale = 1;
+let photoSortMode = 'generation';
+let isDemoMode = false;
+let demoMemberIdCounter = 100;
+
+const INIT_SQL = `
+-- 1. 族员表
+CREATE TABLE IF NOT EXISTS members (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_by UUID REFERENCES auth.users NOT NULL,
+  created_by_email TEXT,
+  name TEXT NOT NULL,
+  style TEXT,
+  gender TEXT,
+  birth TEXT,
+  hometown TEXT,
+  location TEXT,
+  father_name TEXT,
+  spouse TEXT,
+  generation TEXT,
+  clan TEXT,
+  occupation TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. 照片表 (stores base64 or storage path)
+CREATE TABLE IF NOT EXISTS photos (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_by UUID REFERENCES auth.users NOT NULL,
+  data_url TEXT,
+  file_name TEXT,
+  assigned_to TEXT,
+  upload_time TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. 序言表
+CREATE TABLE IF NOT EXISTS preface (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  clan_name TEXT,
+  year TEXT,
+  ancestor TEXT,
+  text TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. 用户资料表
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID REFERENCES auth.users PRIMARY KEY,
+  display_name TEXT,
+  role TEXT DEFAULT 'member',
+  clan TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. Row Level Security for members
+ALTER TABLE members ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "anyone can read members"
+  ON members FOR SELECT USING (true);
+
+CREATE POLICY "users can insert own members"
+  ON members FOR INSERT
+  WITH CHECK (auth.uid() = created_by);
+
+CREATE POLICY "users can update own members"
+  ON members FOR UPDATE
+  USING (
+    auth.uid() = created_by
+    OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+
+CREATE POLICY "users can delete own members"
+  ON members FOR DELETE
+  USING (
+    auth.uid() = created_by
+    OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+
+-- 6. RLS for photos
+ALTER TABLE photos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "anyone can read photos"
+  ON photos FOR SELECT USING (true);
+
+CREATE POLICY "users can manage own photos"
+  ON photos FOR ALL
+  USING (auth.uid() = created_by)
+  WITH CHECK (auth.uid() = created_by);
+
+-- 7. RLS for preface (anyone authenticated can read, only admins write)
+ALTER TABLE preface ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "anyone can read preface"
+  ON preface FOR SELECT USING (true);
+
+CREATE POLICY "authenticated users can upsert preface"
+  ON preface FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+-- 8. Profiles: auto-create on signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, display_name, role)
+  VALUES (new.id, COALESCE(new.raw_user_meta_data->>'display_name', split_part(new.email,'@',1)), 'member');
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- 9. RLS for profiles
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "anyone can read profiles"
+  ON profiles FOR SELECT USING (true);
+
+CREATE POLICY "users can update own profile"
+  ON profiles FOR UPDATE
+  USING (auth.uid() = id);
+`;
+
+// ── Load / save config ──
+function loadSavedConfig() {
+  const url = localStorage.getItem('sb_url');
+  const key = localStorage.getItem('sb_key');
+  return url && key ? { url, key } : null;
+}
+
+function showSetupStep(n) {
+  [1,2,3].forEach(i => {
+    const step = document.getElementById('setup-step-' + i);
+    const tab  = document.getElementById('tab' + i);
+    if (!step || !tab) return;
+    const active = (i === n);
+    step.style.display = active ? 'block' : 'none';
+    tab.style.background = active ? 'linear-gradient(135deg,#2c1a08,#3d2410)' : 'var(--bg2)';
+    tab.style.color = active ? 'var(--gold2)' : 'var(--ink3)';
+  });
+}
+
+function validateSetupInputs() {
+  const url = (document.getElementById('supabase-url').value || '').trim();
+  const key = (document.getElementById('supabase-key').value || '').trim();
+  const urlOk = url.startsWith('https://') && url.includes('.supabase.co');
+  const keyOk = key.startsWith('eyJ') && key.length > 50;
+  document.getElementById('url-ok').style.display  = urlOk && url ? 'block' : 'none';
+  document.getElementById('url-err').style.display = (!urlOk && url) ? 'block' : 'none';
+  document.getElementById('key-ok').style.display  = keyOk && key ? 'block' : 'none';
+  document.getElementById('key-err').style.display = (!keyOk && key) ? 'block' : 'none';
+  const btn = document.getElementById('connect-btn');
+  if (btn) {
+    btn.style.opacity = (urlOk && keyOk) ? '1' : '0.5';
+    btn.style.cursor  = (urlOk && keyOk) ? 'pointer' : 'not-allowed';
+  }
+}
+
+function saveConfig() {
+  const url = (document.getElementById('supabase-url').value || '').trim();
+  const key = (document.getElementById('supabase-key').value || '').trim();
+  if (!url || !key) { showSync('请填写 URL 和密钥'); return; }
+  if (!url.startsWith('https://')) { showSync('URL 格式错误，应以 https:// 开头'); return; }
+  if (!key.startsWith('eyJ')) { showSync('密钥格式错误，应以 eyJ 开头'); return; }
+  showSetupStep(3);
+  setTimeout(() => {
+    localStorage.setItem('sb_url', url);
+    localStorage.setItem('sb_key', key);
+    initSupabase(url, key);
+  }, 1200);
+}
+
+function loadConfig() {
+  const cfg = loadSavedConfig();
+  if (!cfg) { showSync('未找到已保存的配置，请填写 URL 和密钥'); return; }
+  initSupabase(cfg.url, cfg.key);
+}
+
+function copyInitSQL() {
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = INIT_SQL; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+  };
+  try {
+    navigator.clipboard.writeText(INIT_SQL).catch(fallback);
+  } catch(e) { fallback(); }
+  const el = document.getElementById('sql-copied');
+  if (el) { el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 4000); }
+  showSync('✓ SQL 已复制，请粘贴到 Supabase SQL Editor 执行');
+}
+
+function initSupabase(url, key) {
+  try {
+    const { createClient } = supabase;
+    db = createClient(url, key);
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'flex';
+    checkExistingSession();
+  } catch(e) {
+    alert('连接失败：' + e.message);
+  }
+}
+
+function useDemoMode() {
+  isDemoMode = true;
+  document.getElementById('setup-screen').style.display = 'none';
+  currentUser = { id: 'demo-user', email: 'demo@example.com', displayName: '演示用户' };
+  loadDemoData();
+  showApp();
+}
+
+// ══════════════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════════════
+async function checkExistingSession() {
+  if (!db) return;
+  const { data: { session } } = await db.auth.getSession();
+  if (session) {
+    await setCurrentUser(session.user);
+    showApp();
+  }
+  db.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      await setCurrentUser(session.user);
+      showApp();
+    } else if (event === 'SIGNED_OUT') {
+      currentUser = null;
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('auth-screen').style.display = 'flex';
+    }
+  });
+}
+
+async function setCurrentUser(user) {
+  const { data: profile } = await db.from('profiles').select('*').eq('id', user.id).single();
+  currentUser = {
+    id: user.id,
+    email: user.email,
+    displayName: profile?.display_name || user.email.split('@')[0],
+    role: profile?.role || 'member'
+  };
+}
+
+async function loginWithPassword() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!email || !password) { showSync('请填写邮箱和密码'); return; }
+  showSync('登录中…');
+  const { error } = await db.auth.signInWithPassword({ email, password });
+  if (error) showSync('❌ 登录失败：' + error.message);
+}
+
+async function loginWithOTP() {
+  const email = document.getElementById('login-email').value.trim();
+  if (!email) { showSync('请先填写邮箱地址'); return; }
+  showSync('发送验证码中…');
+  const { error } = await db.auth.signInWithOtp({ email });
+  if (error) { showSync('❌ 发送失败：' + error.message); return; }
+  document.getElementById('otp-sent-info').style.display = 'block';
+  showSync('✓ 验证码已发送至 ' + email);
+}
+
+async function verifyOTP() {
+  const email = document.getElementById('login-email').value.trim();
+  const token = document.getElementById('otp-code').value.trim();
+  if (!token) { showSync('请输入验证码'); return; }
+  showSync('验证中…');
+  const { error } = await db.auth.verifyOtp({ email, token, type: 'email' });
+  if (error) showSync('❌ 验证失败：' + error.message);
+}
+
+async function register() {
+  const email = document.getElementById('reg-email').value.trim();
+  const name = document.getElementById('reg-name').value.trim();
+  const password = document.getElementById('reg-password').value;
+  if (!email || !name || !password) { showSync('请填写所有字段'); return; }
+  if (password.length < 6) { showSync('密码至少6位'); return; }
+  showSync('注册中…');
+  const { error } = await db.auth.signUp({
+    email, password,
+    options: { data: { display_name: name } }
+  });
+  if (error) { showSync('❌ 注册失败：' + error.message); return; }
+  showSync('✓ 注册成功，请检查邮箱验证后登录');
+}
+
+async function logout() {
+  if (isDemoMode) {
+    isDemoMode = false; currentUser = null; members = []; photos = [];
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('setup-screen').style.display = 'flex';
+    return;
+  }
+  await db.auth.signOut();
+}
+
+function showLogin() {
+  document.getElementById('login-form').style.display = 'block';
+  document.getElementById('register-form').style.display = 'none';
+}
+function showRegister() {
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('register-form').style.display = 'block';
+}
+
+// ══════════════════════════════════════════════════════════
+//  SHOW APP
+// ══════════════════════════════════════════════════════════
+function showApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  updateUserUI();
+  loadAllData();
+}
+
+function updateUserUI() {
+  if (!currentUser) return;
+  document.getElementById('user-display-name').textContent = currentUser.displayName || currentUser.email;
+  document.getElementById('user-avatar-text').textContent = (currentUser.displayName || currentUser.email).charAt(0);
+  document.getElementById('user-role-label').textContent = { admin:'管理员', member:'族员' }[currentUser.role] || '族员';
+}
+
+// ══════════════════════════════════════════════════════════
+//  DATA LOADING
+// ══════════════════════════════════════════════════════════
+async function loadAllData() {
+  await loadMembers();
+  await loadPhotos();
+  await loadPreface();
+  updateStats();
+}
+
+async function loadMembers() {
+  if (isDemoMode) { renderMembersList(); return; }
+  const { data, error } = await db.from('members').select('*').order('created_at', { ascending: true });
+  if (error) { showSync('❌ 加载族员失败：' + error.message); return; }
+  members = (data || []).map(row => ({
+    id: row.id,
+    createdBy: row.created_by,
+    createdByEmail: row.created_by_email,
+    name: row.name, style: row.style,
+    gender: row.gender, birth: row.birth,
+    hometown: row.hometown, location: row.location,
+    father: row.father_name, spouse: row.spouse,
+    generation: row.generation, clan: row.clan,
+    occupation: row.occupation, notes: row.notes,
+  }));
+  renderMembersList();
+  updateStats();
+}
+
+async function loadPhotos() {
+  if (isDemoMode) { renderPhotos(); return; }
+  const { data, error } = await db.from('photos').select('*').order('upload_time', { ascending: true });
+  if (error) return;
+  photos = (data || []).map(row => ({
+    id: row.id, createdBy: row.created_by,
+    dataUrl: row.data_url, name: row.file_name,
+    assignedTo: row.assigned_to, uploadTime: row.upload_time
+  }));
+  renderPhotos(); updateStats();
+}
+
+async function loadPreface() {
+  if (isDemoMode) return;
+  const { data } = await db.from('preface').select('*').limit(1).single();
+  if (data) {
+    prefaceData = { clanName: data.clan_name||'', year: data.year||'', ancestor: data.ancestor||'', text: data.text||'' };
+    if (prefaceData.clanName) document.getElementById('pref-clan-name').value = prefaceData.clanName;
+    if (prefaceData.year) document.getElementById('pref-year').value = prefaceData.year;
+    if (prefaceData.ancestor) document.getElementById('pref-ancestor').value = prefaceData.ancestor;
+    if (prefaceData.text) { document.getElementById('preface-text').value = prefaceData.text; updatePreviewLive(); }
+    if (prefaceData.clanName) document.getElementById('app-clan-title').textContent = prefaceData.clanName + '家谱';
+  }
+}
+
+function loadDemoData() {
+  members = [
+    {id:1,createdBy:'demo-user',name:'张德厚',style:'厚基',gender:'male',birth:'1920',hometown:'湖南省 长沙县 铜官镇',location:'湖南省 长沙市',father:'',spouse:'李氏',generation:'第三世',clan:'清河堂',occupation:'农耕',notes:'族中长者，迁居铜官镇，育有三子。'},
+    {id:2,createdBy:'demo-user',name:'张仁山',style:'仁山',gender:'male',birth:'1948',hometown:'湖南省 长沙县',location:'湖南省 株洲市',father:'张德厚',spouse:'王翠英',generation:'第四世',clan:'清河堂',occupation:'教师',notes:'响应号召，支援株洲工业建设。'},
+    {id:3,createdBy:'other-user',name:'张仁海',style:'仁海',gender:'male',birth:'1952',hometown:'湖南省 长沙县',location:'广东省 深圳市',father:'张德厚',spouse:'陈秀兰',generation:'第四世',clan:'清河堂',occupation:'企业家',notes:'1980年南下广东，创立制造业企业。'},
+    {id:4,createdBy:'demo-user',name:'张义明',style:'义明',gender:'male',birth:'1975',hometown:'湖南省 株洲市',location:'北京市',father:'张仁山',spouse:'刘晓芳',generation:'第五世',clan:'清河堂',occupation:'工程师',notes:'考入北京大学，现从事信息技术行业。'},
+  ];
+  renderMembersList(); updateStats();
+}
+
+// ══════════════════════════════════════════════════════════
+//  MEMBER CRUD
+// ══════════════════════════════════════════════════════════
+async function addMember() {
+  const name = v('f-name'), gender = v('f-gender');
+  if (!name) { showSync('请填写族员姓名'); return; }
+  if (!gender) { showSync('请选择性别'); return; }
+
+  const memberData = {
+    name, style: v('f-style'), gender,
+    birth: v('f-birth'), hometown: v('f-hometown'), location: v('f-location'),
+    father: v('f-father'), spouse: v('f-spouse'),
+    generation: v('f-generation'), clan: v('f-clan'),
+    occupation: v('f-occupation'), notes: v('f-notes'),
+  };
+
+  if (isDemoMode) {
+    members.push({ id: ++demoMemberIdCounter, createdBy: 'demo-user', ...memberData });
+    renderMembersList(); updateStats(); clearForm();
+    showSync('✓ 已录入：' + name + '（演示模式，未保存至云端）');
+    return;
+  }
+
+  showSync('保存中…');
+  const { data, error } = await db.from('members').insert({
+    created_by: currentUser.id,
+    created_by_email: currentUser.email,
+    name, style: memberData.style, gender,
+    birth: memberData.birth, hometown: memberData.hometown, location: memberData.location,
+    father_name: memberData.father, spouse: memberData.spouse,
+    generation: memberData.generation, clan: memberData.clan,
+    occupation: memberData.occupation, notes: memberData.notes,
+  }).select().single();
+
+  if (error) { showSync('❌ 保存失败：' + error.message); return; }
+
+  members.push({ id: data.id, createdBy: currentUser.id, ...memberData });
+  renderMembersList(); updateStats(); clearForm();
+  showSync('✓ 已保存至云端：' + name);
+}
+
+async function deleteMember(id, e) {
+  if (e) e.stopPropagation();
+  const m = members.find(x => x.id == id);
+  if (!m) return;
+  if (!canEdit(m)) { showSync('❌ 只能删除自己录入的记录'); return; }
+  if (!confirm(`确认删除族员"${m.name}"？`)) return;
+
+  if (!isDemoMode) {
+    const { error } = await db.from('members').delete().eq('id', id);
+    if (error) { showSync('❌ 删除失败：' + error.message); return; }
+  }
+  members = members.filter(x => x.id != id);
+  renderMembersList(); updateStats();
+  showSync('✓ 已删除：' + m.name);
+  document.getElementById('modal-backdrop').classList.remove('open');
+}
+
+function canEdit(m) {
+  if (!m || !currentUser) return false;
+  return isDemoMode || m.createdBy === currentUser.id || currentUser.role === 'admin';
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER MEMBERS
+// ══════════════════════════════════════════════════════════
+function renderMembersList() {
+  const el = document.getElementById('members-list');
+  if (!members.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📜</div><h3>尚未录入族员</h3><p>填写右侧表单录入第一位族员。</p></div>';
+    return;
+  }
+  el.innerHTML = members.map(m => memberCardHTML(m, true)).join('');
+}
+
+function memberCardHTML(m, showDelete=false) {
+  const mine = canEdit(m);
+  const photo = photos.find(p => p.assignedTo === m.name);
+  const aClass = m.gender === 'female' ? 'avatar-female' : 'avatar-male';
+  const avatarContent = photo ? `<img src="${photo.dataUrl}" alt="${m.name}">` : m.name.charAt(0);
+  return `<div class="member-card ${mine ? 'is-mine' : ''}" onclick="showMemberModal('${m.id}')">
+    ${showDelete && mine ? `<button class="delete-btn" onclick="deleteMember('${m.id}',event)" title="删除">✕</button>` : ''}
+    <div class="member-avatar ${aClass}">${avatarContent}</div>
+    <div class="member-name">${m.name}${m.style ? ` <span style="font-size:11px;color:var(--ink3);font-weight:400">（${m.style}）</span>` : ''}</div>
+    <div class="member-info">
+      ${m.birth ? `<div>生年：${m.birth}</div>` : ''}
+      ${m.hometown ? `<div>籍贯：${m.hometown.split(' ').slice(0,2).join(' ')}</div>` : ''}
+      ${m.father ? `<div>父：${m.father}</div>` : ''}
+    </div>
+    ${m.generation ? `<span class="member-badge badge-gen">${m.generation}</span>` : ''}
+    <span class="perm-badge ${mine ? 'perm-mine' : 'perm-others'}" style="margin-left:4px;margin-top:6px">${mine ? '我录入' : '他人录入'}</span>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  PHOTOS
+// ══════════════════════════════════════════════════════════
+async function handlePhotoUpload(e) {
+  const files = Array.from(e.target.files);
+  for (const file of files) {
+    const dataUrl = await readFileAsDataURL(file);
+    const photoObj = { dataUrl, name: file.name, assignedTo: '', uploadTime: new Date().toISOString() };
+
+    if (!isDemoMode) {
+      showSync('上传照片中…');
+      const { data, error } = await db.from('photos').insert({
+        created_by: currentUser.id,
+        data_url: dataUrl,
+        file_name: file.name,
+        assigned_to: '',
+      }).select().single();
+      if (error) { showSync('❌ 上传失败：' + error.message); continue; }
+      photoObj.id = data.id; photoObj.createdBy = currentUser.id;
+    } else {
+      photoObj.id = Date.now() + Math.random(); photoObj.createdBy = 'demo-user';
+    }
+    photos.push(photoObj);
+  }
+  updateStats(); renderPhotos();
+  showSync(`✓ 已上传 ${files.length} 张照片`);
+  e.target.value = '';
+}
+
+function readFileAsDataURL(file) {
+  return new Promise(res => { const r = new FileReader(); r.onload = ev => res(ev.target.result); r.readAsDataURL(file); });
+}
+
+async function assignPhoto(photoId, memberName) {
+  const p = photos.find(x => String(x.id) === String(photoId));
+  if (!p) return;
+  p.assignedTo = memberName;
+  if (!isDemoMode) {
+    await db.from('photos').update({ assigned_to: memberName }).eq('id', photoId);
+  }
+  renderPhotos(); renderMembersList();
+  showSync('已关联：' + memberName);
+}
+
+async function deletePhoto(photoId) {
+  if (!isDemoMode) {
+    await db.from('photos').delete().eq('id', photoId);
+  }
+  photos = photos.filter(x => String(x.id) !== String(photoId));
+  updateStats(); renderPhotos(); renderMembersList();
+  showSync('照片已删除');
+}
+
+function sortPhotos(mode) {
+  photoSortMode = mode;
+  renderPhotos();
+  showSync('已按' + { generation:'辈分', birth:'出生年份', name:'姓名' }[mode] + '排序');
+}
+
+function getSortedPhotos() {
+  const arr = [...photos];
+  if (photoSortMode === 'generation') {
+    arr.sort((a, b) => {
+      const ma = members.find(m => m.name === a.assignedTo);
+      const mb = members.find(m => m.name === b.assignedTo);
+      return (parseInt(ma?.generation) || 99) - (parseInt(mb?.generation) || 99);
+    });
+  } else if (photoSortMode === 'birth') {
+    arr.sort((a, b) => {
+      const ma = members.find(m => m.name === a.assignedTo);
+      const mb = members.find(m => m.name === b.assignedTo);
+      return (parseInt(ma?.birth) || 9999) - (parseInt(mb?.birth) || 9999);
+    });
+  } else {
+    arr.sort((a, b) => (a.assignedTo || a.name).localeCompare(b.assignedTo || b.name, 'zh'));
+  }
+  return arr;
+}
+
+function renderPhotos() {
+  const grid = document.getElementById('photo-grid');
+  if (!photos.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;padding:32px"><div class="empty-icon">🖼️</div><h3>尚无照片</h3><p>上传后系统自动按辈分排列。</p></div>';
+    return;
+  }
+  const sorted = getSortedPhotos();
+  const opts = ['<option value="">— 关联族员 —</option>', ...members.map(m => `<option value="${m.name}">${m.name}</option>`)].join('');
+  grid.innerHTML = sorted.map(p => {
+    const mbr = members.find(m => m.name === p.assignedTo);
+    const selOpts = opts.replace(`value="${p.assignedTo}"`, `value="${p.assignedTo}" selected`);
+    return `<div class="photo-item">
+      <img src="${p.dataUrl}" alt="${p.assignedTo || p.name}">
+      <div class="photo-overlay">
+        <div class="photo-name">${p.assignedTo || p.name}</div>
+        ${mbr ? `<div class="photo-gen">${mbr.generation || ''}</div>` : ''}
+      </div>
+      <div class="photo-assign"><select onchange="assignPhoto('${p.id}',this.value)">${selOpts}</select></div>
+      <button class="photo-del" onclick="deletePhoto('${p.id}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+//  PREFACE
+// ══════════════════════════════════════════════════════════
+function updatePreviewLive() {
+  const clanName = document.getElementById('pref-clan-name').value.trim();
+  const year = document.getElementById('pref-year').value.trim();
+  const ancestor = document.getElementById('pref-ancestor').value.trim();
+  const text = document.getElementById('preface-text').value.trim();
+  const prev = document.getElementById('preface-preview');
+  if (!clanName && !text) { prev.innerHTML = '<span class="empty">序言将在此实时预览…</span>'; return; }
+  let html = '';
+  if (clanName) html += `<div style="text-align:center;font-size:18px;font-weight:700;letter-spacing:4px;margin-bottom:8px;color:var(--ink)">${clanName}</div>`;
+  if (year) html += `<div style="text-align:center;font-size:12px;color:var(--ink3);margin-bottom:16px;letter-spacing:2px">${year}续修</div>`;
+  if (ancestor) html += `<div style="font-size:12px;color:var(--ink3);margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--bg3)">始迁祖：${ancestor}</div>`;
+  if (text) html += `<div style="white-space:pre-wrap;font-size:13px;line-height:2.2;color:var(--ink2)">${text}</div>`;
+  prev.innerHTML = html;
+  if (clanName) { document.getElementById('app-clan-title').textContent = clanName + '家谱'; document.getElementById('pdf-clan-preview').textContent = clanName + '家谱'; }
+}
+
+function generateDefaultPreface() {
+  const clanName = document.getElementById('pref-clan-name').value.trim() || members[0]?.clan || '某氏';
+  const anc = members.find(m => !m.father) || members[0];
+  const draft = `盖闻水有源，树有根，人有祖。${clanName}自始祖${anc ? anc.name : '先祖'}公迁居以来，历经数代繁衍，枝叶茂盛，散布四海。\n\n谱以联族，族以谱传。今逢盛世，承蒙族人倾力相助，合力续修家谱，以志不忘本，以告慰先祖在天之灵。\n\n本谱共录族员${members.length}人，上溯始祖，下及当代，详载出生、迁徙、婚配、职业，力求翔实。凡我族人，无论身在何处，血脉同源，望珍视此谱，传之后世。\n\n${new Date().getFullYear()}年续修`;
+  document.getElementById('preface-text').value = draft;
+  updatePreviewLive();
+  showSync('✓ 序言草稿已生成');
+}
+
+async function savePreface() {
+  prefaceData = {
+    clanName: document.getElementById('pref-clan-name').value.trim(),
+    year: document.getElementById('pref-year').value.trim(),
+    ancestor: document.getElementById('pref-ancestor').value.trim(),
+    text: document.getElementById('preface-text').value.trim(),
+  };
+  if (isDemoMode) { showSync('✓ 序言已保存（演示模式）'); return; }
+  showSync('保存序言…');
+  const { error } = await db.from('preface').upsert({
+    id: '00000000-0000-0000-0000-000000000001',
+    clan_name: prefaceData.clanName, year: prefaceData.year,
+    ancestor: prefaceData.ancestor, text: prefaceData.text,
+    updated_at: new Date().toISOString()
+  });
+  if (error) showSync('❌ 保存失败：' + error.message);
+  else showSync('✓ 序言已保存至云端');
+}
+
+// ══════════════════════════════════════════════════════════
+//  TREE
+// ══════════════════════════════════════════════════════════
+function renderTree() {
+  const svg = document.getElementById('tree-svg');
+  if (!members.length) {
+    svg.setAttribute('width','400'); svg.setAttribute('height','160');
+    svg.innerHTML = `<text x="200" y="80" text-anchor="middle" fill="#6b5540" font-size="13" font-family="Noto Serif SC,serif">请先录入族员信息</text>`;
+    return;
+  }
+  const childrenOf = {}, hasParent = {};
+  members.forEach(m => {
+    if (m.father) {
+      if (!childrenOf[m.father]) childrenOf[m.father] = [];
+      if (members.find(x => x.name === m.father)) { childrenOf[m.father].push(m); hasParent[m.id] = true; }
+    }
+  });
+  const roots = members.filter(m => !hasParent[m.id]);
+  const levels = [];
+  const assignLevel = (m, lv) => {
+    if (!levels[lv]) levels[lv] = [];
+    levels[lv].push(m);
+    (childrenOf[m.name] || []).forEach(c => assignLevel(c, lv + 1));
+  };
+  roots.forEach(r => assignLevel(r, 0));
+  const nodeW = 110, nodeH = 52, levelH = 108, gap = 16;
+  const positions = {};
+  const svgW = Math.max(560, levels.reduce((a, lv) => Math.max(a, lv.length * (nodeW + gap)), 0) + 80);
+  const svgH = levels.length * levelH + 60;
+  levels.forEach((lv, li) => {
+    const total = lv.length * nodeW + (lv.length - 1) * gap;
+    const sx = (svgW - total) / 2;
+    lv.forEach((m, i) => { positions[m.id] = { x: sx + i * (nodeW + gap), y: 28 + li * levelH }; });
+  });
+  svg.setAttribute('width', svgW); svg.setAttribute('height', svgH);
+  svg.style.transform = `scale(${treeScale})`; svg.style.transformOrigin = 'top left';
+  let h = `<defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#c4a070" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>`;
+  members.forEach(m => {
+    if (m.father) {
+      const par = members.find(x => x.name === m.father);
+      if (par && positions[m.id] && positions[par.id]) {
+        const px = positions[par.id].x + nodeW / 2, py = positions[par.id].y + nodeH;
+        const cx = positions[m.id].x + nodeW / 2, cy = positions[m.id].y;
+        h += `<path d="M${px} ${py} C${px} ${(py+cy)/2} ${cx} ${(py+cy)/2} ${cx} ${cy}" fill="none" stroke="#d4b896" stroke-width="1.2" marker-end="url(#arr)"/>`;
+      }
+    }
+  });
+  members.forEach(m => {
+    const p = positions[m.id]; if (!p) return;
+    const photo = photos.find(ph => ph.assignedTo === m.name);
+    const mine = canEdit(m);
+    const isMale = m.gender === 'male';
+    const bg = isMale ? '#EEF3FC' : '#FCF0F3';
+    const stroke = mine ? '#c8882a' : (isMale ? '#7090C0' : '#C07090');
+    const tc = isMale ? '#2a4a8a' : '#8a2a50';
+    const sw = mine ? '1.5' : '1';
+    h += `<g onclick="showMemberModal('${m.id}')" style="cursor:pointer">
+      <rect x="${p.x}" y="${p.y}" width="${nodeW}" height="${nodeH}" rx="8" fill="${bg}" stroke="${stroke}" stroke-width="${sw}" filter="drop-shadow(0 2px 4px rgba(100,60,0,0.08))"/>
+      ${mine ? `<rect x="${p.x}" y="${p.y}" width="${nodeW}" height="3" rx="1.5" fill="#c8882a"/>` : ''}`;
+    if (photo) h += `<clipPath id="cp${m.id}"><circle cx="${p.x + 13}" cy="${p.y + nodeH/2}" r="10"/></clipPath><image href="${photo.dataUrl}" x="${p.x+3}" y="${p.y+nodeH/2-10}" width="20" height="20" clip-path="url(#cp${m.id})"/>`;
+    h += `<text x="${p.x+nodeW/2+(photo?4:0)}" y="${p.y+17}" text-anchor="middle" font-size="12" font-weight="600" fill="${tc}" font-family="Noto Serif SC,serif">${m.name}</text>
+      <text x="${p.x+nodeW/2}" y="${p.y+32}" text-anchor="middle" font-size="10" fill="#6b5540" font-family="Noto Sans SC,sans-serif">${m.birth||''}${m.generation ? '·'+m.generation.replace('第','').replace('世','世') : ''}</text>
+      <text x="${p.x+nodeW/2}" y="${p.y+46}" text-anchor="middle" font-size="9" fill="#7a5010" font-family="Noto Sans SC,sans-serif">${m.hometown ? m.hometown.split(' ')[0] : ''}</text>
+    </g>`;
+  });
+  svg.innerHTML = h;
+}
+
+function treeZoom(f) {
+  treeScale = f === 1 ? 1 : Math.max(0.3, Math.min(2.5, treeScale * f));
+  document.getElementById('tree-svg').style.transform = `scale(${treeScale})`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  SEARCH & RELATION
+// ══════════════════════════════════════════════════════════
+function performSearch() {
+  const q = document.getElementById('search-input').value.trim().toLowerCase();
+  const el = document.getElementById('search-results');
+  const filtered = q === '' ? members : members.filter(m =>
+    [m.name, m.style, m.hometown, m.location, m.generation, m.clan, m.occupation, m.father, m.spouse]
+      .some(v => v && v.toLowerCase().includes(q))
+  );
+  if (!filtered.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><h3>未找到</h3></div>'; return; }
+  el.innerHTML = filtered.map(m => memberCardHTML(m, false)).join('');
+}
+
+function computeRelation() {
+  const an = document.getElementById('rel-a').value.trim(), bn = document.getElementById('rel-b').value.trim();
+  const el = document.getElementById('rel-result'); el.style.display = 'block';
+  const a = members.find(m => m.name.includes(an)), b = members.find(m => m.name.includes(bn));
+  if (!a || !b) { el.innerHTML = `<div style="padding:12px;background:rgba(155,40,40,.06);border:1px solid rgba(155,40,40,.2);border-radius:8px;font-size:12px;color:var(--red)">未找到对应族员，请先录入。</div>`; return; }
+  let rel = '关系待定', detail = '';
+  if (b.father === a.name) { rel = `${a.name} 是 ${b.name} 的父亲`; detail = '直系一代'; }
+  else if (a.father === b.name) { rel = `${b.name} 是 ${a.name} 的父亲`; detail = '直系一代'; }
+  else if (a.father === b.father && a.father) { rel = `${a.name} 与 ${b.name} 为兄弟/姐妹`; detail = '共同父亲：' + a.father; }
+  else if (a.generation === b.generation && a.clan === b.clan && a.generation) { rel = '同辈族人'; detail = a.generation + '·' + a.clan; }
+  else if (a.clan === b.clan && a.clan) { rel = '同族远亲'; detail = '同属 ' + a.clan; }
+  el.innerHTML = `<div style="padding:14px;background:rgba(200,136,42,.06);border:1px solid rgba(200,136,42,.25);border-radius:10px"><div style="font-family:var(--serif);font-size:14px;color:var(--ink);margin-bottom:4px">◈ ${rel}</div><div style="font-size:11px;color:var(--ink3)">${detail}</div></div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  PDF
+// ══════════════════════════════════════════════════════════
+const pdfOpts = new Set(['opt-preface','opt-list','opt-tree','opt-photos']);
+function togglePdfOpt(el) { el.classList.toggle('selected'); if (el.classList.contains('selected')) pdfOpts.add(el.id); else pdfOpts.delete(el.id); }
+function updatePdfPreview() {
+  const n = document.getElementById('pdf-clan-name').value.trim();
+  if (n) { document.getElementById('pdf-clan-preview').textContent = n; document.getElementById('pdf-year-preview').textContent = document.getElementById('pdf-edition').value.trim() || '族谱副本'; }
+}
+
+function generatePDF() {
+  const clanName = document.getElementById('pdf-clan-name').value.trim() || prefaceData.clanName || '家族族谱';
+  const edition = document.getElementById('pdf-edition').value.trim() || new Date().getFullYear() + '年版';
+  const sorted = [...members].sort((a, b) => (parseInt(a.generation) || 99) - (parseInt(b.generation) || 99));
+  let content = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;700&display=swap');
+    body{font-family:'Noto Serif SC',serif;color:#1a1209;background:white;margin:0;padding:0}
+    .cover{page-break-after:always;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#1a0e05,#3d2410);color:#f5d99a;text-align:center;padding:60px}
+    .cover h1{font-size:40px;letter-spacing:8px;margin-bottom:16px} .cover p{font-size:14px;letter-spacing:3px;color:rgba(245,217,154,.7);margin-top:8px}
+    .section{page-break-before:always;padding:60px 80px}
+    h2{font-size:22px;letter-spacing:4px;color:#2c1a08;border-bottom:2px solid #c8882a;padding-bottom:8px;margin-bottom:28px}
+    .preface-text{font-size:15px;line-height:2.4;color:#3d2e1a;white-space:pre-wrap;letter-spacing:.5px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th{background:#2c1a08;color:#f5d99a;padding:8px 12px;font-size:12px;letter-spacing:1px}
+    td{padding:8px 12px;border-bottom:1px solid #ede0c8;font-size:12px;vertical-align:top}
+    tr:nth-child(even) td{background:#fdf8f0}
+    .mn{font-size:14px;font-weight:700;color:#1a1209}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>`;
+  content += `<div class="cover"><h1>${clanName}</h1><p>${edition}</p><p style="margin-top:40px;font-size:12px">族员：${members.length}人　世代：${new Set(members.map(m=>m.generation).filter(Boolean)).size}代</p></div>`;
+  if (pdfOpts.has('opt-preface') && prefaceData.text) {
+    content += `<div class="section"><h2>谱　序</h2>${prefaceData.ancestor ? `<p style="font-size:13px;color:#6b5540;margin-bottom:20px">始迁祖：${prefaceData.ancestor}</p>` : ''}<div class="preface-text">${prefaceData.text}</div></div>`;
+  }
+  if (pdfOpts.has('opt-list')) {
+    content += `<div class="section"><h2>族　员　名　录</h2><table><tr><th>姓名</th><th>辈分</th><th>出生</th><th>祖籍</th><th>父亲</th><th>配偶</th><th>职业</th></tr>${sorted.map(m=>`<tr><td><span class="mn">${m.name}</span>${m.style?`<br><small style="color:#6b5540">${m.style}</small>`:''}</td><td>${m.generation||'—'}</td><td>${m.birth||'—'}</td><td>${m.hometown||'—'}</td><td>${m.father||'—'}</td><td>${m.spouse||'—'}</td><td>${m.occupation||'—'}</td></tr>`).join('')}</table></div>`;
+  }
+  if (pdfOpts.has('opt-photos') && photos.length) {
+    const ap = getSortedPhotos().filter(p => p.assignedTo);
+    if (ap.length) {
+      content += `<div class="section"><h2>族　员　照　片</h2><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:16px">${ap.map(p=>`<div style="text-align:center"><img src="${p.dataUrl}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid #d4b896"><div style="font-size:12px;margin-top:6px;color:#3d2e1a;font-weight:600">${p.assignedTo}</div>${members.find(m=>m.name===p.assignedTo)?.generation?`<div style="font-size:10px;color:#6b5540">${members.find(m=>m.name===p.assignedTo).generation}</div>`:''}</div>`).join('')}</div></div>`;
+    }
+  }
+  content += `</body></html>`;
+  const w = window.open('', '_blank', 'width=900,height=700');
+  w.document.write(content); w.document.close();
+  w.onload = () => setTimeout(() => w.print(), 800);
+  document.getElementById('pdf-status').textContent = '✓ 打印预览已打开，请在对话框中选择「存储为 PDF」。';
+  showSync('✓ PDF 已生成，请在打印窗口保存');
+}
+
+// ══════════════════════════════════════════════════════════
+//  MODAL
+// ══════════════════════════════════════════════════════════
+function showMemberModal(id) {
+  const m = members.find(x => String(x.id) === String(id)); if (!m) return;
+  const photo = photos.find(p => p.assignedTo === m.name);
+  const mine = canEdit(m);
+  const fields = [['性别', m.gender === 'male' ? '男' : '女'], ['生年', m.birth], ['祖籍', m.hometown], ['现居地', m.location], ['父亲', m.father], ['配偶', m.spouse], ['辈分', m.generation], ['堂号', m.clan], ['职业', m.occupation]].filter(([,v]) => v);
+  document.getElementById('modal-title').textContent = m.name + (m.style ? ` · ${m.style}` : '');
+  document.getElementById('modal-body').innerHTML = `
+    ${photo ? `<div style="text-align:center;margin-bottom:16px"><img src="${photo.dataUrl}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:2px solid var(--gold)"></div>` : ''}
+    <div style="margin-bottom:12px"><span class="perm-badge ${mine ? 'perm-mine' : 'perm-others'}">${mine ? '✓ 我录入的记录（可编辑）' : '他人录入的记录（只读）'}</span></div>
+    <table style="width:100%;font-size:12px;border-collapse:collapse">
+      ${fields.map(([k,v]) => `<tr><td style="padding:6px 0;color:var(--ink3);width:60px;font-size:11px">${k}</td><td style="padding:6px 0;color:var(--ink);font-weight:500">${v}</td></tr>`).join('')}
+    </table>
+    ${m.notes ? `<div style="margin-top:12px;padding:10px;background:var(--bg2);border-radius:8px;border:1px solid var(--bg3);font-size:12px;color:var(--ink3);line-height:1.9">${m.notes}</div>` : ''}
+    ${m.createdByEmail ? `<div style="margin-top:10px;font-size:10px;color:var(--ink3)">录入者：${m.createdByEmail}</div>` : ''}
+    <div style="display:flex;gap:8px;margin-top:16px">
+      ${mine ? `<button class="btn btn-danger" onclick="deleteMember('${m.id}')">删除此记录</button>` : `<div style="font-size:11px;color:var(--ink3);padding:8px 0">如需修改此记录，请联系录入人（${m.createdByEmail || '未知'}）或管理员。</div>`}
+    </div>`;
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+function closeModal(e) { if (e.target === document.getElementById('modal-backdrop')) document.getElementById('modal-backdrop').classList.remove('open'); }
+
+// ══════════════════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════════════════
+function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+function updateStats() {
+  document.getElementById('total-members').textContent = members.length;
+  document.getElementById('total-photos').textContent = photos.length;
+  document.getElementById('total-gen').textContent = new Set(members.map(m => m.generation).filter(Boolean)).size || 0;
+}
+
+function clearForm() {
+  ['f-name','f-style','f-birth','f-hometown','f-location','f-father','f-spouse','f-generation','f-clan','f-occupation','f-notes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('f-gender').value = '';
+}
+
+function switchTab(id) {
+  const ids = ['add','search','tree','photos','preface','pdf'];
+  document.querySelectorAll('.nav-tab').forEach((t, i) => t.classList.toggle('active', ids[i] === id));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  if (id === 'tree') renderTree();
+  if (id === 'search') performSearch();
+  if (id === 'photos') renderPhotos();
+  if (id === 'pdf') { updatePdfPreview(); renderPdfMemberPreview(); }
+}
+
+function renderPdfMemberPreview() {
+  const sorted = [...members].sort((a, b) => (parseInt(a.generation) || 99) - (parseInt(b.generation) || 99));
+  const el = document.getElementById('pdf-member-preview');
+  if (!el) return;
+  if (!sorted.length) { el.innerHTML = '<div style="color:var(--ink3);font-size:12px">录入族员后预览将显示在此。</div>'; return; }
+  el.innerHTML = sorted.slice(0, 3).map(m => `<div style="display:flex;gap:14px;padding:10px 0;border-bottom:1px solid var(--bg3)"><div style="font-size:15px;font-weight:700;color:var(--ink2);min-width:60px;font-family:var(--serif)">${m.name}</div><div style="flex:1;font-size:11px;color:var(--ink3);line-height:1.9">${m.generation ? m.generation + '　' : ''}${m.birth ? m.birth + '年生　' : ''}${m.hometown ? '籍贯：' + m.hometown + '　' : ''}${m.occupation ? '职：' + m.occupation : ''}</div></div>`).join('') + (members.length > 3 ? `<div style="font-size:11px;color:var(--ink3);padding-top:8px">… 共 ${members.length} 位族员</div>` : '');
+}
+
+let syncTimer = null;
+function showSync(msg) {
+  const bar = document.getElementById('sync-bar');
+  bar.textContent = msg; bar.classList.add('show');
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => bar.classList.remove('show'), 3500);
+}
+
+// ── On load: auto-detect saved config ──
+(function() {
+  const cfg = loadSavedConfig();
+  if (cfg) {
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'flex';
+    initSupabase(cfg.url, cfg.key);
+  } else {
+    showSetupStep(1);
+  }
+})();
+</script>
+</body>
+</html>
