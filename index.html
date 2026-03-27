@@ -709,6 +709,10 @@ textarea { resize: vertical; min-height: 68px; }
         </div>
         <div id="pdf-status" style="margin-top:10px;font-size:12px;color:var(--ink3)"></div>
       </div>
+      <div class="card">
+        <div class="card-title">名录预览（前三条）</div>
+        <div id="pdf-member-preview" style="font-family:var(--serif)"></div>
+      </div>
     </div>
 
   </div><!-- /main -->
@@ -944,21 +948,28 @@ async function checkExistingSession() {
 }
 
 async function setCurrentUser(user) {
-  try {
-    const { data: profile } = await db.from('profiles').select('*').eq('id', user.id).single();
-    currentUser = {
+  // Use maybeSingle() instead of single() — returns null instead of 406 error
+  // when the profile row doesn't exist yet (e.g. trigger hasn't fired)
+  const { data: profile } = await db
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  currentUser = {
+    id: user.id,
+    email: user.email,
+    displayName: profile?.display_name || user.email.split('@')[0],
+    role: profile?.role || 'member'
+  };
+
+  // If no profile exists yet, create one now
+  if (!profile) {
+    await db.from('profiles').upsert({
       id: user.id,
-      email: user.email,
-      displayName: profile?.display_name || user.email.split('@')[0],
-      role: profile?.role || 'member'
-    };
-  } catch(e) {
-    currentUser = {
-      id: user.id,
-      email: user.email,
-      displayName: user.email.split('@')[0],
+      display_name: user.email.split('@')[0],
       role: 'member'
-    };
+    }, { onConflict: 'id', ignoreDuplicates: true });
   }
 }
 
