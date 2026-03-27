@@ -529,7 +529,7 @@ textarea { resize: vertical; min-height: 68px; }
           <div class="stat-item"><div class="stat-num" id="total-gen">0</div><div class="stat-label">世代</div></div>
           <div class="stat-item"><div class="stat-num" id="total-photos">0</div><div class="stat-label">照片</div></div>
         </div>
-        <div class="user-badge" onclick="toggleUserMenu()">
+        <div class="user-badge" >
           <div class="user-avatar" id="user-avatar-text">张</div>
           <div>
             <div class="user-name" id="user-display-name">加载中…</div>
@@ -1076,6 +1076,8 @@ function promptDisplayName() {
     });
   }
 }
+
+function toggleUserMenu() { /* reserved for future user menu */ }
 
 function updateUserUI() {
   if (!currentUser) return;
