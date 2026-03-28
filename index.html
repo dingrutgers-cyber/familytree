@@ -602,9 +602,11 @@ function showScreen(name) {
 
 // ─── TABS ─────────────────────────────────────────────────
 function showTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const tabNames = ['add','search','tree','photos','preface','pdf'];
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', tabNames[i] === name);
+  });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  event.currentTarget.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'tree') renderTree();
   if (name === 'search') doSearch();
