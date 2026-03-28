@@ -978,7 +978,7 @@ function renderTree() {
   const byName  = {};
   allM.forEach(m => { byName[m.name] = m; });
 
-  // Build parent→children map (real members only)
+  // ── Step 1: parent→child relationships ────────────────
   const childrenOf = {}, hasParent = {};
   members.forEach(m => {
     if (!m.father || !byName[m.father]) return;
@@ -986,37 +986,57 @@ function renderTree() {
     childrenOf[m.father].push(m);
     hasParent[m.id] = true;
   });
-  const roots = members.filter(m => !hasParent[m.id]);
+
+  // ── Step 2: determine who is a "side spouse" ──────────
+  // A member is a side-spouse if they appear in someone else's .spouse field
+  // and that someone is the "primary" person (we pick the one with children,
+  // or if neither has children, the one who listed the spouse field)
+  const sideSpouseIds = new Set(); // ids of members rendered beside their partner
+  const partnerOf = {};            // primaryMemberId → spouseObject (real or virtual)
+
+  // Process real member spouses
+  members.forEach(m => {
+    if (!m.spouse) return;
+    const sp = byName[m.spouse];
+    if (!sp || sp.virtual) return;
+    if (sideSpouseIds.has(sp.id)) return; // already assigned
+    if (sideSpouseIds.has(m.id)) return;  // m is already a side-spouse
+    // Decide who is "primary": prefer the one with children
+    const mHasKids  = !!(childrenOf[m.name]  && childrenOf[m.name].length);
+    const spHasKids = !!(childrenOf[sp.name] && childrenOf[sp.name].length);
+    let primary, side;
+    if (mHasKids && !spHasKids) { primary = m; side = sp; }
+    else if (!mHasKids && spHasKids) { primary = sp; side = m; }
+    else { primary = m; side = sp; } // default: m is primary
+    sideSpouseIds.add(side.id);
+    partnerOf[primary.id] = side;
+  });
+
+  // Virtual spouses always go beside their partner
+  virtual.forEach(v => {
+    const partner = byName[v.spouseOf];
+    if (partner && !partnerOf[partner.id]) {
+      partnerOf[partner.id] = v;
+    }
+  });
+
+  // ── Step 3: roots = no parent AND not a side-spouse ───
+  const roots = members.filter(m => !hasParent[m.id] && !sideSpouseIds.has(m.id));
 
   // Node dimensions
-  const NW  = 36;   // node width
-  const NH  = 100;  // node height
-  const GX  = 56;   // gap between generations (horizontal)
-  const GY  = 16;   // gap between siblings (vertical)
-  const SPW = 36;   // spouse node width (same as NW)
-  const SPG = 10;   // gap between member and spouse
+  const NW  = 36;
+  const NH  = 100;
+  const GX  = 56;
+  const GY  = 16;
+  const SPG = 10;
 
-  // Find spouse (virtual or real non-child) for a member
-  function getSpouse(m) {
-    const vsp = virtual.find(v => v.spouseOf === m.name);
-    if (vsp) return vsp;
-    if (m.spouse) {
-      const r = members.find(x => x.name === m.spouse && !hasParent[x.id] && x.id !== m.id);
-      return r || null;
-    }
-    return null;
-  }
-
-  // Layout: left-to-right, generation by generation
-  // Each "slot" = member node + optional spouse beside it
-  // Returns height consumed by this subtree
-  const pos = {};  // id → {x, y}
+  const pos = {};
 
   function layout(m, x, yStart) {
-    const children = childrenOf[m.name] || [];
-    const sp = getSpouse(m);
-    // Width this node+spouse takes — next generation starts after this
-    const blockW = NW + (sp ? SPG + SPW : 0);
+    // Children excludes side-spouses
+    const children = (childrenOf[m.name] || []).filter(c => !sideSpouseIds.has(c.id));
+    const sp = partnerOf[m.id];
+    const blockW = NW + (sp ? SPG + NW : 0);
     const nextX  = x + blockW + GX;
 
     let totalH;
@@ -1024,15 +1044,13 @@ function renderTree() {
       pos[m.id] = { x, y: yStart };
       totalH = NH;
     } else {
-      let cy = yStart;
-      let sumH = 0;
+      let cy = yStart, sumH = 0;
       children.forEach(child => {
         const ch = layout(child, nextX, cy);
-        cy  += ch + GY;
+        cy   += ch + GY;
         sumH += ch + GY;
       });
       sumH -= GY;
-      // Center member vertically over its children
       const firstY = pos[children[0].id].y;
       const lastY  = pos[children[children.length-1].id].y;
       const midY   = (firstY + lastY + NH) / 2 - NH / 2;
@@ -1040,7 +1058,7 @@ function renderTree() {
       totalH = sumH;
     }
 
-    // Place spouse to the right of member, same y
+    // Place spouse right of member at same y
     if (sp) {
       pos[sp.id] = { x: x + NW + SPG, y: pos[m.id].y };
     }
@@ -1060,51 +1078,39 @@ function renderTree() {
     maxX = Math.max(maxX, p.x + NW);
     maxY = Math.max(maxY, p.y + NH);
   });
-  const svgW = Math.max(500, maxX + 40);
-  const svgH = Math.max(200, maxY + 40);
-  svg.setAttribute('width', svgW);
-  svg.setAttribute('height', svgH);
+  svg.setAttribute('width',  Math.max(500, maxX + 40));
+  svg.setAttribute('height', Math.max(200, maxY + 40));
   svg.style.transform = `scale(${treeScale})`;
   svg.style.transformOrigin = 'top left';
 
   let h = '';
 
-  // ── Parent→child lines (right-angle) ──────────────────
-  const lineColor = '#6b5540';
+  // ── Parent→child lines ─────────────────────────────────
   members.forEach(m => {
     if (!m.father) return;
     const par = byName[m.father];
     if (!par || !pos[m.id] || !pos[par.id]) return;
-    const px  = pos[par.id].x + NW;        // right edge of parent
-    const py  = pos[par.id].y + NH / 2;    // mid of parent
-    const cx  = pos[m.id].x;               // left edge of child
-    const cy  = pos[m.id].y + NH / 2;      // mid of child
+    const px   = pos[par.id].x + NW;
+    const py   = pos[par.id].y + NH / 2;
+    const cx   = pos[m.id].x;
+    const cy   = pos[m.id].y + NH / 2;
     const midX = px + (cx - px) / 2;
     h += `<path d="M${px} ${py} H${midX} V${cy} H${cx}"
-      fill="none" stroke="${lineColor}" stroke-width="0.8"/>`;
+      fill="none" stroke="#6b5540" stroke-width="0.8"/>`;
   });
 
-  // ── Spouse lines (horizontal, between member and spouse) ──
-  const drawnSp = new Set();
-  allM.forEach(m => {
-    const spName = m.spouse || m.spouseOf;
-    if (!spName) return;
-    const sp = byName[spName];
-    if (!sp || !pos[m.id] || !pos[sp.id]) return;
-    const key = [m.id, sp.id].sort().join('_');
-    if (drawnSp.has(key)) return;
-    drawnSp.add(key);
-    // Draw between the two nodes (they should be side by side)
-    const leftP  = pos[m.id].x < pos[sp.id].x ? pos[m.id] : pos[sp.id];
-    const rightP = pos[m.id].x < pos[sp.id].x ? pos[sp.id] : pos[m.id];
-    const x1 = leftP.x + NW;
-    const x2 = rightP.x;
+  // ── Spouse ♥ lines ─────────────────────────────────────
+  Object.entries(partnerOf).forEach(([mid, sp]) => {
+    const primary = allM.find(x => String(x.id) === String(mid));
+    if (!primary || !pos[primary.id] || !pos[sp.id]) return;
+    const leftP  = pos[primary.id].x <= pos[sp.id].x ? pos[primary.id] : pos[sp.id];
+    const rightP = pos[primary.id].x <= pos[sp.id].x ? pos[sp.id] : pos[primary.id];
+    const x1 = leftP.x + NW, x2 = rightP.x;
     if (x2 > x1) {
       const my = leftP.y + NH / 2;
-      const mx = (x1 + x2) / 2;
       h += `<line x1="${x1}" y1="${my}" x2="${x2}" y2="${my}"
         stroke="#c43a3a" stroke-width="1" stroke-dasharray="3 2" opacity="0.85"/>
-      <text x="${mx}" y="${my + 4}" text-anchor="middle"
+      <text x="${(x1+x2)/2}" y="${my+4}" text-anchor="middle"
         font-size="9" fill="#c43a3a">♥</text>`;
     }
   });
@@ -1112,63 +1118,47 @@ function renderTree() {
   // ── Draw nodes ─────────────────────────────────────────
   allM.forEach(m => {
     const p = pos[m.id]; if (!p) return;
-    const ph   = photos.find(ph2 => ph2.to === m.name);
-    const mine = isMine(m);
+    const ph     = photos.find(ph2 => ph2.to === m.name);
+    const mine   = isMine(m);
+    const isVirt = m.virtual;
+    const isMale = m.gender === 'male';
 
-    const isVirtual = m.virtual;
-    const isMale    = m.gender === 'male';
-    const bg     = isVirtual ? (isMale ? '#F4F6FD' : '#FDF4F7')
-                 : mine      ? '#FDF6EC'
-                 : isMale    ? '#EEF3FC' : '#FCF0F3';
-    const stroke = isVirtual ? (isMale ? '#7090C0' : '#C07090')
-                 : mine      ? '#c8882a'
-                 : isMale    ? '#7090C0' : '#C07090';
+    const bg     = isVirt ? (isMale?'#F4F6FD':'#FDF4F7') : mine?'#FDF6EC' : isMale?'#EEF3FC':'#FCF0F3';
+    const stroke = isVirt ? (isMale?'#7090C0':'#C07090') : mine?'#c8882a' : isMale?'#7090C0':'#C07090';
     const tc     = isMale ? '#2a4a8a' : '#8a2a50';
-    const sw     = mine ? 1.5 : 0.8;
-    const dashArr = isVirtual ? 'stroke-dasharray="5 3"' : '';
-    const opacity = isVirtual ? 'opacity="0.85"' : '';
-    const clickFn = isVirtual
-      ? `promptAddSpouse('${m.name}','${m.spouseOf}')`
-      : `openModal('${m.id}')`;
+    const dash   = isVirt ? 'stroke-dasharray="5 3"' : '';
+    const op     = isVirt ? 'opacity="0.85"' : '';
+    const fn     = isVirt ? `promptAddSpouse('${m.name}','${m.spouseOf}')` : `openModal('${m.id}')`;
 
-    h += `<g onclick="${clickFn}" style="cursor:pointer" ${opacity}>
+    h += `<g onclick="${fn}" style="cursor:pointer" ${op}>
       <rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="4"
-        fill="${bg}" stroke="${stroke}" stroke-width="${sw}" ${dashArr}/>
-      ${mine ? `<rect x="${p.x}" y="${p.y}" width="${NW}" height="3" rx="1.5" fill="#c8882a"/>` : ''}`;
+        fill="${bg}" stroke="${stroke}" stroke-width="${mine?1.5:0.8}" ${dash}/>
+      ${mine?`<rect x="${p.x}" y="${p.y}" width="${NW}" height="3" rx="1.5" fill="#c8882a"/>`:''}`;
 
-    // Photo thumbnail
     if (ph) {
-      const imgY = p.y + (mine ? 3 : 0) + 3;
-      const imgS = NW - 6;
-      h += `<clipPath id="cpt${m.id.toString().replace(/\W/g,'')}">
-        <rect x="${p.x+3}" y="${imgY}" width="${imgS}" height="${imgS}" rx="3"/>
-      </clipPath>
-      <image href="${ph.url}" x="${p.x+3}" y="${imgY}"
-        width="${imgS}" height="${imgS}"
-        clip-path="url(#cpt${m.id.toString().replace(/\W/g,'')})"/>`;
+      const iy = p.y+(mine?3:0)+3, is_ = NW-6;
+      const cid = 'cp'+String(m.id).replace(/\W/g,'');
+      h += `<clipPath id="${cid}"><rect x="${p.x+3}" y="${iy}" width="${is_}" height="${is_}" rx="3"/></clipPath>
+        <image href="${ph.url}" x="${p.x+3}" y="${iy}" width="${is_}" height="${is_}" clip-path="url(#${cid})"/>`;
     }
 
-    // Vertical name — one char per line
-    const chars   = m.name.split('');
-    const charH   = 14;
-    const topOff  = ph ? ((NW - 6) + 6 + (mine ? 3 : 0)) : (mine ? 3 : 0);
-    const availH  = NH - topOff - 14; // 14 reserved for gen label
-    const textStartY = p.y + topOff + Math.max(0, (availH - chars.length * charH) / 2) + charH;
-
-    chars.forEach((ch, i) => {
-      h += `<text x="${p.x + NW/2}" y="${textStartY + i * charH}"
-        text-anchor="middle" font-size="13" font-weight="600"
-        fill="${tc}" font-family="Noto Serif SC,serif">${ch}</text>`;
+    const chars  = m.name.split('');
+    const charH  = 14;
+    const topOff = ph ? ((NW-6)+6+(mine?3:0)) : (mine?3:0);
+    const avail  = NH - topOff - 14;
+    const ty0    = p.y + topOff + Math.max(0,(avail-chars.length*charH)/2) + charH;
+    chars.forEach((ch,i) => {
+      h += `<text x="${p.x+NW/2}" y="${ty0+i*charH}" text-anchor="middle"
+        font-size="13" font-weight="600" fill="${tc}"
+        font-family="Noto Serif SC,serif">${ch}</text>`;
     });
 
-    // Bottom label
-    const bottomLabel = isVirtual ? '配偶' : (m.gen ? m.gen.replace('第','').replace('世','世').substring(0,3) : '');
-    if (bottomLabel) {
+    const label = isVirt?'配偶':(m.gen?m.gen.replace('第','').replace('世','世').substring(0,3):'');
+    if (label) {
       h += `<text x="${p.x+NW/2}" y="${p.y+NH-3}" text-anchor="middle"
-        font-size="7" fill="${mine ? '#7a5010' : '#6b5540'}"
-        font-family="Noto Sans SC,sans-serif">${bottomLabel}</text>`;
+        font-size="7" fill="${mine?'#7a5010':'#6b5540'}"
+        font-family="Noto Sans SC,sans-serif">${label}</text>`;
     }
-
     h += '</g>';
   });
 
