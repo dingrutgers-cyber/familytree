@@ -701,7 +701,14 @@ async function loadMembers() {
 }
 
 async function loadPhotos() {
-  const { data } = await db.from('photos').select('*').order('upload_time');
+  let { data, error } = await db.from('photos').select('*').order('upload_time');
+  if (error) {
+    // Fallback: try without ordering (in case upload_time column doesn't exist)
+    const res = await db.from('photos').select('*');
+    data  = res.data;
+    error = res.error;
+  }
+  if (error) { toast('❌ 加载照片失败：' + error.message, true); return; }
   photos = (data || []).map(r => ({
     id: r.id, by: r.created_by, url: r.data_url,
     name: r.file_name, to: r.assigned_to
@@ -999,15 +1006,31 @@ function renderTree() {
     if (!m.spouse) return;
     const sp = byName[m.spouse];
     if (!sp || sp.virtual) return;
-    if (sideSpouseIds.has(sp.id)) return; // already assigned
-    if (sideSpouseIds.has(m.id)) return;  // m is already a side-spouse
-    // Decide who is "primary": prefer the one with children
-    const mHasKids  = !!(childrenOf[m.name]  && childrenOf[m.name].length);
-    const spHasKids = !!(childrenOf[sp.name] && childrenOf[sp.name].length);
+    if (sideSpouseIds.has(sp.id)) return;
+    if (sideSpouseIds.has(m.id)) return;
+    // KEY FIX: a person who has a parent (hasParent) is a tree node,
+    // they must NEVER become a side-spouse of someone else.
+    // Side-spouse must be someone with no parent in the tree.
+    const mIsNode  = !!hasParent[m.id];
+    const spIsNode = !!hasParent[sp.id];
     let primary, side;
-    if (mHasKids && !spHasKids) { primary = m; side = sp; }
-    else if (!mHasKids && spHasKids) { primary = sp; side = m; }
-    else { primary = m; side = sp; } // default: m is primary
+    if (mIsNode && !spIsNode)  { primary = m;  side = sp; } // m is tree node, sp is side
+    else if (!mIsNode && spIsNode) { primary = sp; side = m;  } // sp is tree node, m is side
+    else if (mIsNode && spIsNode)  {
+      // Both have parents: pick one with children as primary, other as side
+      const mHasKids  = !!(childrenOf[m.name]  && childrenOf[m.name].length);
+      const spHasKids = !!(childrenOf[sp.name] && childrenOf[sp.name].length);
+      if (mHasKids && !spHasKids)       { primary = m;  side = sp; }
+      else if (!mHasKids && spHasKids)  { primary = sp; side = m;  }
+      else { return; } // both have children — can't be side-spouse, skip
+    } else {
+      // Neither has parent: prefer the one with children
+      const mHasKids  = !!(childrenOf[m.name]  && childrenOf[m.name].length);
+      const spHasKids = !!(childrenOf[sp.name] && childrenOf[sp.name].length);
+      if (mHasKids && !spHasKids)       { primary = m;  side = sp; }
+      else if (!mHasKids && spHasKids)  { primary = sp; side = m;  }
+      else { primary = m; side = sp; } // default
+    }
     sideSpouseIds.add(side.id);
     partnerOf[primary.id] = side;
   });
