@@ -1026,17 +1026,17 @@ function renderTree() {
       pos[m.id] = { x, y: midY };
     }
 
-    // Place spouse right of member
+    // Place spouse below member (traditional style)
     const sp = virtual.find(v => v.spouseOf === m.name);
     if (sp) {
-      pos[sp.id] = { x: x + NW + 8, y: pos[m.id].y };
+      pos[sp.id] = { x: pos[m.id].x, y: pos[m.id].y + NH + 12 };
     }
-    // Also check if member has a real spouse in allM
+    // Also check if member has a real spouse already in members list
     if (m.spouse) {
       const spReal = members.find(r => r.name === m.spouse);
       if (spReal && !hasParent[spReal.id] && spReal.id !== m.id) {
         if (!pos[spReal.id]) {
-          pos[spReal.id] = { x: x + NW + 8, y: pos[m.id].y };
+          pos[spReal.id] = { x: pos[m.id].x, y: pos[m.id].y + NH + 12 };
         }
       }
     }
@@ -1088,7 +1088,7 @@ function renderTree() {
       fill="none" stroke="${lineColor}" stroke-width="${lineW}"/>`;
   });
 
-  // Spouse lines: short horizontal dash with ♥
+  // Spouse lines: vertical line between member and spouse with ♥
   const drawnSpouses = new Set();
   allM.forEach(m => {
     if (!m.spouse && !m.spouseOf) return;
@@ -1098,17 +1098,15 @@ function renderTree() {
     const key = [m.id, sp.id].sort().join('_');
     if (drawnSpouses.has(key)) return;
     drawnSpouses.add(key);
-    // Only draw if side by side
-    const ay = pos[m.id].y + NH / 2;
-    const by2 = pos[sp.id].y + NH / 2;
-    if (Math.abs(ay - by2) < NH) {
-      const x1 = pos[m.id].x + NW;
-      const x2 = pos[sp.id].x;
-      const my = (ay + by2) / 2;
-      h += `<line x1="${x1}" y1="${my}" x2="${x2}" y2="${my}"
-        stroke="#c43a3a" stroke-width="0.8" stroke-dasharray="3 2" opacity="0.7"/>
-      <text x="${(x1+x2)/2}" y="${my+4}" text-anchor="middle"
-        font-size="8" fill="#c43a3a" opacity="0.8">♥</text>`;
+    const mx = pos[m.id].x + NW / 2;
+    const y1 = pos[m.id].y + NH;
+    const y2 = pos[sp.id].y;
+    if (y2 > y1) {
+      const midY = (y1 + y2) / 2;
+      h += `<line x1="${mx}" y1="${y1}" x2="${mx}" y2="${y2}"
+        stroke="#c43a3a" stroke-width="0.8" stroke-dasharray="3 2" opacity="0.8"/>
+      <text x="${mx}" y="${midY+4}" text-anchor="middle"
+        font-size="9" fill="#c43a3a" opacity="0.9">♥</text>`;
     }
   });
 
