@@ -1084,7 +1084,7 @@ async function doSavePreface() {
 
 // ─── PDF ──────────────────────────────────────────────────
 function doGenPDF() {
-  const clanName = vv('pdf-clan') || pref.name || '家族族谱';
+  const clanName = vv('pdf-clan') || pref.name || '丁氏家族族谱';
   const edition  = vv('pdf-ed') || new Date().getFullYear() + '年版';
   const sorted = [...members].sort((a, b) => (parseInt(a.gen) || 99) - (parseInt(b.gen) || 99));
   const inclPreface = document.getElementById('po-preface').classList.contains('on');
