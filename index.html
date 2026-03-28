@@ -886,14 +886,6 @@ function copyInitSQL() {
   showSync('✓ SQL copied — paste it in Supabase SQL Editor and click Run');
 }
 
-function useDemoMode() {
-  isDemoMode = true;
-  document.getElementById('auth-screen').style.display = 'none';
-  currentUser = { id: 'demo-user', email: 'demo@example.com', displayName: '演示用户' };
-  loadDemoData();
-  showApp();
-}
-
 function initSupabase() {
   try {
     const { createClient } = supabase;
