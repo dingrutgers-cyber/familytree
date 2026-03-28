@@ -1176,7 +1176,7 @@ function renderPhotos() {
     return;
   }
   const opts = ['<option value="">— 关联族员 —</option>',
-    ...members.map(m => `<option value="${m.name}">${m.name}</option>`)].join('');
+    ...allMembers.map(m => `<option value="${m.name}">${m.name}</option>`)].join('');
   el.innerHTML = getSortedPhotos().map(p => {
     const mbr = members.find(m => m.name === p.to);
     const sel = opts.replace(`value="${p.to}"`, `value="${p.to}" selected`);
