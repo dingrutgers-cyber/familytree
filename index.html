@@ -191,7 +191,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
   text-align:center;cursor:pointer;transition:all .2s;background:#f7efe0;
   position:relative}
 .upload-zone:hover{border-color:#c8882a;background:rgba(200,136,42,.04)}
-.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-zone input{display:none}
 .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:14px}
 .photo-item{position:relative;border-radius:9px;overflow:hidden;
   border:1px solid #d4b896;aspect-ratio:1;background:#f7efe0}
@@ -442,11 +442,17 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
     <div class="panel" id="tab-photos">
       <div class="card">
         <div class="card-title">上传照片</div>
-        <div class="upload-zone">
-          <input type="file" accept="image/*" multiple onchange="doUploadPhotos(event)">
+        <div class="upload-zone" onclick="document.getElementById('photo-file-input').click()">
+          <input type="file" id="photo-file-input" accept="image/*" multiple
+                 style="display:none" onchange="doUploadPhotos(event)">
           <div style="font-size:30px;margin-bottom:8px">📷</div>
-          <div style="font-size:13px;color:#3d2e1a;margin-bottom:3px">点击或拖拽上传族员照片</div>
+          <div style="font-size:13px;color:#3d2e1a;margin-bottom:3px">点击上传族员照片</div>
           <div style="font-size:11px;color:#6b5540">支持 JPG、PNG，可批量上传</div>
+          <button onclick="event.stopPropagation();document.getElementById('photo-file-input').click()"
+            style="margin-top:12px;padding:7px 20px;background:linear-gradient(135deg,#2c1a08,#3d2410);
+            color:#e6b060;border:1px solid #c8882a;border-radius:7px;font-size:12px;cursor:pointer">
+            选择照片
+          </button>
         </div>
       </div>
       <div class="card">
@@ -1156,13 +1162,13 @@ function doSortPhotos(mode) {
 function getSortedPhotos() {
   const arr = [...photos];
   if (photoSort === 'gen') arr.sort((a, b) => {
-    const ma = members.find(m => m.name === a.to);
-    const mb = members.find(m => m.name === b.to);
+    const ma = allMembers().find(m => m.name === a.to);
+    const mb = allMembers().find(m => m.name === b.to);
     return (parseInt(ma?.gen) || 99) - (parseInt(mb?.gen) || 99);
   });
   else if (photoSort === 'birth') arr.sort((a, b) => {
-    const ma = members.find(m => m.name === a.to);
-    const mb = members.find(m => m.name === b.to);
+    const ma = allMembers().find(m => m.name === a.to);
+    const mb = allMembers().find(m => m.name === b.to);
     return (parseInt(ma?.birth) || 9999) - (parseInt(mb?.birth) || 9999);
   });
   else arr.sort((a, b) => (a.to || a.name).localeCompare(b.to || b.name, 'zh'));
@@ -1176,9 +1182,9 @@ function renderPhotos() {
     return;
   }
   const opts = ['<option value="">— 关联族员 —</option>',
-    ...allMembers().map(m => `<option value="${m.name}">${m.name}</option>`)].join('');
+    ...allMembers().map(m => `<option value="${m.name}">${m.name}${m.virtual ? '（配偶）' : ''}</option>`)].join('');
   el.innerHTML = getSortedPhotos().map(p => {
-    const mbr = members.find(m => m.name === p.to);
+    const mbr = allMembers().find(m => m.name === p.to);
     const sel = opts.replace(`value="${p.to}"`, `value="${p.to}" selected`);
     return `<div class="photo-item">
       <img src="${p.url}" alt="${p.to || p.name}">
@@ -1276,7 +1282,7 @@ tr:nth-child(even) td{background:#fdf8f0}
         ${ap.map(p => `<div style="text-align:center">
           <img src="${p.url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:7px;border:1px solid #d4b896">
           <div style="font-size:11px;margin-top:5px;font-weight:700;color:#3d2e1a">${p.to}</div>
-          ${members.find(m=>m.name===p.to)?.gen?`<div style="font-size:9px;color:#6b5540">${members.find(m=>m.name===p.to).gen}</div>`:''}
+          ${allMembers().find(m=>m.name===p.to)?.gen?`<div style="font-size:9px;color:#6b5540">${allMembers().find(m=>m.name===p.to).gen}</div>`:''}
         </div>`).join('')}</div></div>`;
     }
   }
