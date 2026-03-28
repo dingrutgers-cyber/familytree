@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>家族族谱</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ─── Reset ─── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-height:100vh}
+
+/* ─── Screens ─── */
+.screen{display:none;min-height:100vh}
+.screen.active{display:flex}
+
+/* ─── Auth ─── */
+#auth-screen{align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#1a0e05,#3d2410);padding:20px}
+.auth-box{background:#fdf8f0;border:1px solid #c4a070;border-radius:16px;
+  padding:40px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.auth-logo{text-align:center;margin-bottom:24px}
+.auth-logo .seal{width:60px;height:60px;border-radius:50%;
+  background:linear-gradient(135deg,#1a0e05,#3d2410);
+  border:2px solid #c8882a;display:inline-flex;align-items:center;
+  justify-content:center;font-size:22px;color:#f5d99a;font-weight:700;
+  margin-bottom:12px}
+.auth-logo h1{font-size:20px;letter-spacing:4px;color:#1a1209;font-weight:700}
+.auth-logo p{font-size:11px;color:#6b5540;letter-spacing:2px;margin-top:4px}
+.auth-field{margin-bottom:14px}
+.auth-field label{display:block;font-size:11px;color:#6b5540;margin-bottom:5px;font-weight:500}
+.auth-field input{width:100%;padding:10px 12px;border:1px solid #d4b896;
+  border-radius:8px;font-size:14px;background:#f7efe0;outline:none;
+  transition:border-color .2s}
+.auth-field input:focus{border-color:#c8882a;background:white}
+.btn-main{width:100%;padding:12px;background:linear-gradient(135deg,#2c1a08,#3d2410);
+  color:#e6b060;border:1px solid #c8882a;border-radius:10px;
+  font-size:14px;font-weight:600;letter-spacing:2px;cursor:pointer;
+  transition:all .2s;margin-top:4px}
+.btn-main:hover{background:linear-gradient(135deg,#3d2410,#5a3518)}
+.auth-note{margin-top:14px;padding:10px;background:#f7efe0;border-radius:8px;
+  font-size:12px;color:#6b5540;line-height:1.7;border:1px solid #ede0c8}
+.auth-alt{text-align:center;margin-top:12px;font-size:12px;color:#6b5540}
+.auth-alt a{color:#c8882a;cursor:pointer;text-decoration:underline}
+.msg{padding:10px 12px;border-radius:8px;font-size:12px;margin-top:10px;display:none}
+.msg.error{background:rgba(155,40,40,.08);border:1px solid rgba(155,40,40,.3);color:#9b2828}
+.msg.success{background:rgba(26,96,48,.08);border:1px solid rgba(26,96,48,.3);color:#1a6030}
+.msg.show{display:block}
+
+/* ─── App ─── */
+#app-screen{flex-direction:column}
+.topbar{background:linear-gradient(135deg,#1a0e05,#3d2410);
+  position:relative;overflow:hidden}
+.topbar::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background-image:repeating-linear-gradient(0deg,transparent,transparent 28px,
+    rgba(200,136,42,.05) 28px,rgba(200,136,42,.05) 29px),
+  repeating-linear-gradient(90deg,transparent,transparent 28px,
+    rgba(200,136,42,.05) 28px,rgba(200,136,42,.05) 29px)}
+.topbar-inner{position:relative;padding:16px 24px;display:flex;align-items:center;gap:14px}
+.top-seal{width:46px;height:46px;border-radius:50%;border:2px solid #c8882a;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.top-seal span{font-size:16px;color:#c8882a;font-weight:700;letter-spacing:2px}
+.top-title h1{font-size:18px;color:#f5d99a;letter-spacing:4px;font-weight:600}
+.top-title p{font-size:10px;color:rgba(200,136,42,.7);letter-spacing:2px;margin-top:2px}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.top-stats{display:flex;gap:14px}
+.top-stat{text-align:center;border-left:1px solid rgba(200,136,42,.3);padding-left:12px}
+.top-stat-num{font-size:17px;color:#e6b060;font-weight:600}
+.top-stat-label{font-size:9px;color:rgba(245,217,154,.6);letter-spacing:1px}
+.top-user{display:flex;align-items:center;gap:8px;padding:5px 10px 5px 6px;
+  background:rgba(200,136,42,.1);border:1px solid rgba(200,136,42,.3);border-radius:20px}
+.top-user-avatar{width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(135deg,#2c1a08,#c8882a);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;color:#f5d99a;font-weight:700}
+.top-user-name{font-size:12px;color:#e6b060;max-width:100px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-logout{padding:4px 10px;border:1px solid rgba(200,136,42,.4);
+  background:transparent;color:rgba(245,217,154,.8);font-size:11px;
+  border-radius:6px;cursor:pointer;transition:all .15s}
+.btn-logout:hover{background:rgba(155,40,40,.2);color:#ffaaaa}
+
+/* ─── Tabs ─── */
+.tabs{background:#221408;display:flex;border-bottom:1px solid rgba(200,136,42,.2);
+  padding:0 24px;overflow-x:auto}
+.tab{padding:10px 16px;font-size:12px;color:rgba(245,217,154,.5);cursor:pointer;
+  letter-spacing:1px;border-bottom:2px solid transparent;
+  transition:all .2s;white-space:nowrap;user-select:none}
+.tab:hover{color:#e6b060}
+.tab.active{color:#e6b060;border-bottom-color:#c8882a}
+
+/* ─── Content ─── */
+.content{flex:1;padding:24px;max-width:1100px;margin:0 auto;width:100%}
+.panel{display:none}
+.panel.active{display:block}
+
+/* ─── Cards ─── */
+.card{background:white;border:1px solid #d4b896;border-radius:12px;
+  padding:20px;box-shadow:0 2px 10px rgba(100,60,0,.08);margin-bottom:16px}
+.card-title{font-size:14px;font-weight:600;color:#3d2e1a;margin-bottom:14px;
+  display:flex;align-items:center;gap:7px}
+.card-title::before{content:'';width:3px;height:14px;background:#c8882a;
+  border-radius:2px;flex-shrink:0}
+
+/* ─── Form ─── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group.full{grid-column:1/-1}
+.form-group label{font-size:11px;color:#6b5540;font-weight:500}
+.form-group input,.form-group select,.form-group textarea{
+  border:1px solid #d4b896;border-radius:7px;padding:7px 10px;
+  font-size:13px;background:#f7efe0;color:#1a1209;outline:none;
+  transition:border-color .2s;width:100%;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{
+  border-color:#c8882a;background:white}
+.form-group textarea{resize:vertical;min-height:64px}
+.btn-row{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:4px;padding:8px 16px;
+  border-radius:7px;font-size:12px;cursor:pointer;transition:all .15s;
+  border:none;font-weight:500;font-family:inherit}
+.btn-primary{background:linear-gradient(135deg,#2c1a08,#3d2410);
+  color:#e6b060;border:1px solid #c8882a}
+.btn-primary:hover{background:linear-gradient(135deg,#3d2410,#5a3518)}
+.btn-secondary{background:#f7efe0;color:#3d2e1a;border:1px solid #d4b896}
+.btn-secondary:hover{background:#ede0c8}
+.btn-danger{background:rgba(155,40,40,.08);color:#9b2828;border:1px solid rgba(155,40,40,.3)}
+.btn-danger:hover{background:rgba(155,40,40,.15)}
+
+/* ─── Notice bar ─── */
+.notice{padding:10px 14px;border-radius:8px;font-size:12px;
+  margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.notice.info{background:rgba(200,136,42,.06);border:1px solid rgba(200,136,42,.2);color:#6b5540}
+.notice.ok{background:rgba(26,96,48,.08);border:1px solid rgba(26,96,48,.3);color:#1a6030}
+.notice.err{background:rgba(155,40,40,.08);border:1px solid rgba(155,40,40,.3);color:#9b2828}
+
+/* ─── Member grid ─── */
+.member-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.member-card{background:white;border:1px solid #d4b896;border-radius:10px;
+  padding:13px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.member-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,#c8882a,#e6b060);transform:scaleX(0);
+  transition:transform .2s;transform-origin:left}
+.member-card.mine::before{transform:scaleX(1)}
+.member-card:hover{box-shadow:0 4px 20px rgba(100,60,0,.15);transform:translateY(-2px)}
+.member-card:hover::before{transform:scaleX(1)}
+.member-avatar{width:42px;height:42px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:700;margin-bottom:8px}
+.male{background:rgba(50,80,150,.1);color:#2a4a8a;border:1px solid rgba(50,80,150,.2)}
+.female{background:rgba(155,40,80,.1);color:#8a2a50;border:1px solid rgba(155,40,80,.2)}
+.member-name{font-size:14px;font-weight:700;color:#1a1209;margin-bottom:3px}
+.member-info{font-size:11px;color:#6b5540;line-height:1.5}
+.member-tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;
+  margin-top:6px;background:rgba(200,136,42,.1);color:#7a5010;
+  border:1px solid rgba(200,136,42,.25)}
+.del-btn{position:absolute;top:7px;right:7px;width:20px;height:20px;
+  border-radius:50%;border:1px solid rgba(155,40,40,.3);
+  background:rgba(155,40,40,.06);color:#9b2828;font-size:10px;
+  cursor:pointer;display:none;align-items:center;justify-content:center}
+.member-card:hover .del-btn{display:flex}
+
+/* ─── Empty state ─── */
+.empty{text-align:center;padding:40px 20px;color:#6b5540}
+.empty-icon{font-size:40px;margin-bottom:10px}
+.empty h3{font-size:14px;color:#3d2e1a;margin-bottom:6px;font-weight:600}
+.empty p{font-size:12px;line-height:1.7}
+
+/* ─── Search ─── */
+.search-row{display:flex;gap:8px;margin-bottom:14px}
+.search-row input{flex:1;padding:8px 12px;border:1px solid #c4a070;
+  border-radius:9px;font-size:13px;background:white;outline:none;
+  transition:border-color .2s}
+.search-row input:focus{border-color:#c8882a}
+.search-btn{background:#c8882a;color:white;border:none;border-radius:9px;
+  padding:8px 14px;cursor:pointer;font-size:13px}
+
+/* ─── Tree ─── */
+.tree-box{background:white;border:1px solid #d4b896;border-radius:12px;
+  overflow:hidden;box-shadow:0 2px 10px rgba(100,60,0,.08)}
+.tree-bar{display:flex;align-items:center;gap:8px;padding:11px 16px;
+  background:#f7efe0;border-bottom:1px solid #ede0c8;flex-wrap:wrap}
+.tree-bar h3{font-size:13px;color:#3d2e1a;flex:1;font-weight:600}
+.zoom-btn{width:28px;height:28px;border:1px solid #d4b896;border-radius:6px;
+  background:white;cursor:pointer;font-size:14px;display:flex;
+  align-items:center;justify-content:center;transition:all .15s}
+.zoom-btn:hover{background:#ede0c8;border-color:#c8882a}
+#tree-wrap{padding:20px;overflow:auto;min-height:280px}
+
+/* ─── Photos ─── */
+.upload-zone{border:2px dashed #c4a070;border-radius:10px;padding:28px 20px;
+  text-align:center;cursor:pointer;transition:all .2s;background:#f7efe0;
+  position:relative}
+.upload-zone:hover{border-color:#c8882a;background:rgba(200,136,42,.04)}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:14px}
+.photo-item{position:relative;border-radius:9px;overflow:hidden;
+  border:1px solid #d4b896;aspect-ratio:1;background:#f7efe0}
+.photo-item img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-overlay{position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(transparent,rgba(20,10,2,.8));padding:5px 7px}
+.photo-name{font-size:10px;color:#f5d99a;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.photo-del{position:absolute;top:4px;right:4px;width:18px;height:18px;
+  border-radius:50%;background:rgba(155,40,40,.85);color:white;
+  border:none;font-size:10px;cursor:pointer;display:none;
+  align-items:center;justify-content:center}
+.photo-item:hover .photo-del{display:flex}
+.assign-sel{position:absolute;top:4px;left:4px}
+.assign-sel select{font-size:9px;padding:1px 3px;border-radius:3px;
+  border:1px solid rgba(200,136,42,.5);background:rgba(20,10,2,.75);
+  color:#f5d99a;cursor:pointer;max-width:75px}
+
+/* ─── Preface ─── */
+.preface-preview{background:#f7efe0;border:1px solid #d4b896;border-radius:9px;
+  padding:20px;font-size:13px;line-height:2.1;color:#3d2e1a;
+  white-space:pre-wrap;min-height:100px}
+
+/* ─── PDF ─── */
+.pdf-hero{background:linear-gradient(135deg,#1a0e05,#2c1a08);border-radius:11px;
+  padding:22px;color:#f5d99a;text-align:center;margin-bottom:16px}
+.pdf-hero-icon{font-size:40px;margin-bottom:8px}
+.pdf-hero-title{font-size:17px;font-weight:700;letter-spacing:3px;margin-bottom:4px}
+.pdf-hero-sub{font-size:11px;color:rgba(200,136,42,.7);letter-spacing:2px}
+.pdf-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.pdf-opt{background:white;border:1px solid #d4b896;border-radius:9px;
+  padding:12px;cursor:pointer;transition:all .15s}
+.pdf-opt:hover{border-color:#e6b060}
+.pdf-opt.on{border-color:#c8882a;background:rgba(200,136,42,.04)}
+.pdf-opt-title{font-size:12px;font-weight:700;color:#3d2e1a;margin-bottom:3px}
+.pdf-opt-desc{font-size:11px;color:#6b5540;line-height:1.5}
+
+/* ─── Modal ─── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:#fdf8f0;border:1px solid #c4a070;border-radius:14px;
+  max-width:520px;width:100%;max-height:85vh;overflow-y:auto;
+  box-shadow:0 16px 50px rgba(0,0,0,.35)}
+.modal-head{display:flex;align-items:center;padding:16px 20px 12px;
+  border-bottom:1px solid #ede0c8}
+.modal-head h3{font-size:15px;font-weight:600;color:#1a1209;flex:1}
+.modal-x{width:24px;height:24px;border-radius:5px;border:1px solid #d4b896;
+  background:white;cursor:pointer;font-size:12px;display:flex;
+  align-items:center;justify-content:center;color:#6b5540;transition:all .15s}
+.modal-x:hover{background:#ede0c8;color:#9b2828}
+.modal-body{padding:16px 20px 20px}
+
+/* ─── Toast ─── */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:#2c1a08;color:#e6b060;padding:10px 20px;border-radius:20px;
+  font-size:12px;border:1px solid #c8882a;box-shadow:0 4px 18px rgba(0,0,0,.3);
+  z-index:200;opacity:0;transition:all .3s;white-space:nowrap;
+  max-width:90vw;text-align:center;cursor:pointer}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.toast.err{background:#6b1a1a;border-color:#c43a3a}
+
+/* ─── Misc ─── */
+.divider{height:1px;background:#ede0c8;margin:14px 0}
+.section-label{font-size:12px;color:#6b5540;letter-spacing:1px;
+  margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.section-label::after{content:'';flex:1;height:1px;background:#ede0c8}
+</style>
+</head>
+<body>
+
+<!-- ═══ AUTH SCREEN ═══ -->
+<div id="auth-screen" class="screen active">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <div class="seal">谱</div>
+      <h1>宗族家谱系统</h1>
+      <p>万世同源 · 血脉相承</p>
+    </div>
+
+    <div id="state-email">
+      <div class="auth-field">
+        <label>你的邮箱地址</label>
+        <input type="email" id="inp-email" placeholder="name@example.com"
+               onkeydown="if(event.key==='Enter')doSendLink()">
+      </div>
+      <button class="btn-main" onclick="doSendLink()" id="send-btn">发送登录链接</button>
+      <div class="auth-note">
+        输入邮箱 → 点按钮 → 去邮箱点链接 → 自动登录<br>
+        <small>首次使用会自动注册，无需单独注册</small>
+      </div>
+      <div class="auth-alt">
+        已有密码？<a onclick="showState('password')">用密码登录</a>
+      </div>
+    </div>
+
+    <div id="state-sent" style="display:none;text-align:center;padding:10px 0">
+      <div style="font-size:44px;margin-bottom:12px">📬</div>
+      <div style="font-size:15px;font-weight:700;color:#1a6030;margin-bottom:8px">链接已发送！</div>
+      <div style="font-size:12px;color:#6b5540;line-height:1.9;margin-bottom:14px">
+        请检查邮箱 <strong id="sent-to"></strong><br>
+        点击邮件中的链接即可登录<br>
+        <small>没收到？检查垃圾邮件夹，或等30秒后重试</small>
+      </div>
+      <button class="btn-main" onclick="showState('email')" style="padding:9px">重新输入邮箱</button>
+    </div>
+
+    <div id="state-password" style="display:none">
+      <div class="auth-field">
+        <label>邮箱</label>
+        <input type="email" id="inp-pw-email" placeholder="name@example.com">
+      </div>
+      <div class="auth-field">
+        <label>密码</label>
+        <input type="password" id="inp-pw-pass" placeholder="你的密码"
+               onkeydown="if(event.key==='Enter')doPasswordLogin()">
+      </div>
+      <button class="btn-main" onclick="doPasswordLogin()">登 入</button>
+      <div class="auth-alt" style="margin-top:10px">
+        <a onclick="showState('email')">← 用邮箱链接登录</a>
+      </div>
+    </div>
+
+    <div id="auth-msg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ═══ APP SCREEN ═══ -->
+<div id="app-screen" class="screen">
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="top-seal"><span>谱</span></div>
+      <div class="top-title">
+        <h1 id="app-title">宗族家谱系统</h1>
+        <p>万世同源 · 血脉相承 · 云端同步</p>
+      </div>
+      <div class="top-right">
+        <div class="top-stats">
+          <div class="top-stat">
+            <div class="top-stat-num" id="stat-members">0</div>
+            <div class="top-stat-label">族员</div>
+          </div>
+          <div class="top-stat">
+            <div class="top-stat-num" id="stat-gen">0</div>
+            <div class="top-stat-label">世代</div>
+          </div>
+        </div>
+        <div class="top-user">
+          <div class="top-user-avatar" id="user-av">?</div>
+          <div class="top-user-name" id="user-nm">…</div>
+        </div>
+        <button class="btn-logout" onclick="doLogout()">退出</button>
+      </div>
+    </div>
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('add')">✦ 录入族员</div>
+      <div class="tab" onclick="showTab('search')">⊙ 检索查询</div>
+      <div class="tab" onclick="showTab('tree')">❖ 族谱图谱</div>
+      <div class="tab" onclick="showTab('photos')">◉ 族员照片</div>
+      <div class="tab" onclick="showTab('preface')">卷 家族序言</div>
+      <div class="tab" onclick="showTab('pdf')">⬇ 导出PDF</div>
+    </div>
+  </div>
+
+  <!-- Content panels -->
+  <div class="content">
+
+    <!-- ADD -->
+    <div class="panel active" id="tab-add">
+      <div class="notice info" id="db-notice">
+        🔐 你只能修改或删除<strong>自己录入</strong>的记录（金色顶栏）。
+        <button onclick="doTestConn()" style="margin-left:auto;padding:3px 9px;
+          background:transparent;border:1px solid #c4a070;border-radius:5px;
+          font-size:11px;color:#6b5540;cursor:pointer">🔗 测试连接</button>
+      </div>
+      <div class="card">
+        <div class="card-title" id="form-title">新增族员信息</div>
+        <div class="form-grid">
+          <div class="form-group"><label>姓名 *</label><input id="f-name" placeholder="例：张明远"></div>
+          <div class="form-group"><label>字号</label><input id="f-style" placeholder="例：子涵"></div>
+          <div class="form-group"><label>性别 *</label>
+            <select id="f-gender"><option value="">— 选择 —</option>
+              <option value="male">男</option><option value="female">女</option></select></div>
+          <div class="form-group"><label>出生年份</label><input id="f-birth" placeholder="例：1958"></div>
+          <div class="form-group"><label>祖籍</label><input id="f-hometown" placeholder="例：湖南省 长沙县"></div>
+          <div class="form-group"><label>现居地</label><input id="f-location" placeholder="例：广东省 深圳市"></div>
+          <div class="form-group"><label>父亲姓名</label><input id="f-father" placeholder="建立父子关联"></div>
+          <div class="form-group"><label>配偶姓名</label><input id="f-spouse" placeholder="配偶姓名"></div>
+          <div class="form-group"><label>辈分</label><input id="f-gen" placeholder="例：第五世 / 仁字辈"></div>
+          <div class="form-group"><label>堂号</label><input id="f-clan" placeholder="例：清河堂"></div>
+          <div class="form-group full"><label>职业 / 成就</label><input id="f-job" placeholder="例：教师、企业家"></div>
+          <div class="form-group full"><label>备注 / 传记</label>
+            <textarea id="f-notes" placeholder="人物事迹、迁徙记录……"></textarea></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="save-btn" onclick="doSaveMember()">＋ 保存至云端</button>
+          <button class="btn btn-secondary" onclick="doClearForm()">清空</button>
+        </div>
+      </div>
+      <div class="section-label">全部族员</div>
+      <div class="member-grid" id="members-list">
+        <div class="empty"><div class="empty-icon">📜</div>
+          <h3>暂无族员记录</h3><p>从上方表单录入第一位族员</p></div>
+      </div>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="panel" id="tab-search">
+      <div class="card">
+        <div class="card-title">族员检索</div>
+        <div class="search-row">
+          <input id="search-q" placeholder="输入姓名、祖籍、堂号…" oninput="doSearch()">
+          <button class="search-btn" onclick="doSearch()">搜索</button>
+        </div>
+        <div class="member-grid" id="search-results"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">关系推导</div>
+        <div class="form-grid">
+          <div class="form-group"><label>族员甲</label><input id="rel-a" placeholder="姓名"></div>
+          <div class="form-group"><label>族员乙</label><input id="rel-b" placeholder="姓名"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doRelation()">推算关系</button>
+        </div>
+        <div id="rel-out" style="display:none;margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- TREE -->
+    <div class="panel" id="tab-tree">
+      <div class="tree-box">
+        <div class="tree-bar">
+          <h3>族谱图谱</h3>
+          <button class="zoom-btn" onclick="doZoom(1.2)">＋</button>
+          <button class="zoom-btn" onclick="doZoom(0.83)">－</button>
+          <button class="zoom-btn" onclick="doZoom(1)" style="font-size:10px;width:36px">重置</button>
+          <button class="btn btn-secondary" style="padding:4px 10px;font-size:11px"
+                  onclick="renderTree()">刷新</button>
+        </div>
+        <div id="tree-wrap"><svg id="tree-svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      </div>
+    </div>
+
+    <!-- PHOTOS -->
+    <div class="panel" id="tab-photos">
+      <div class="card">
+        <div class="card-title">上传照片</div>
+        <div class="upload-zone">
+          <input type="file" accept="image/*" multiple onchange="doUploadPhotos(event)">
+          <div style="font-size:30px;margin-bottom:8px">📷</div>
+          <div style="font-size:13px;color:#3d2e1a;margin-bottom:3px">点击或拖拽上传族员照片</div>
+          <div style="font-size:11px;color:#6b5540">支持 JPG、PNG，可批量上传</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">排序</div>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-secondary" onclick="doSortPhotos('gen')">按辈分</button>
+          <button class="btn btn-secondary" onclick="doSortPhotos('birth')">按出生年</button>
+          <button class="btn btn-secondary" onclick="doSortPhotos('name')">按姓名</button>
+        </div>
+      </div>
+      <div class="section-label">照片库</div>
+      <div class="photo-grid" id="photo-grid">
+        <div class="empty" style="grid-column:1/-1">
+          <div class="empty-icon">🖼️</div>
+          <h3>尚无照片</h3><p>上传后按辈分自动排列</p></div>
+      </div>
+    </div>
+
+    <!-- PREFACE -->
+    <div class="panel" id="tab-preface">
+      <div class="card">
+        <div class="card-title">家族序言</div>
+        <div class="form-grid" style="margin-bottom:12px">
+          <div class="form-group">
+            <label>家族名称</label>
+            <input id="pref-name" placeholder="例：清河张氏" oninput="previewPreface()">
+          </div>
+          <div class="form-group">
+            <label>编修年份</label>
+            <input id="pref-year" placeholder="例：2025年" oninput="previewPreface()">
+          </div>
+          <div class="form-group full">
+            <label>始迁祖</label>
+            <input id="pref-anc" placeholder="例：始祖张德厚，清道光年间自湖南长沙迁居…" oninput="previewPreface()">
+          </div>
+          <div class="form-group full">
+            <label>序言正文</label>
+            <textarea id="pref-text" style="min-height:160px"
+              placeholder="盖闻水有源，树有根，人有祖……" oninput="previewPreface()"></textarea>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="doGenPreface()">✦ 自动生成草稿</button>
+          <button class="btn btn-primary" onclick="doSavePreface()">保存序言</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">预览</div>
+        <div class="preface-preview" id="pref-preview">序言将在此显示…</div>
+      </div>
+    </div>
+
+    <!-- PDF -->
+    <div class="panel" id="tab-pdf">
+      <div class="pdf-hero">
+        <div class="pdf-hero-icon">📜</div>
+        <div class="pdf-hero-title" id="pdf-title">家族族谱</div>
+        <div class="pdf-hero-sub">点击下方按钮生成 PDF 副本</div>
+      </div>
+      <div class="card">
+        <div class="card-title">PDF 设置</div>
+        <div class="pdf-opts">
+          <div class="pdf-opt on" id="po-preface" onclick="this.classList.toggle('on')">
+            <div class="pdf-opt-title">✦ 家族序言</div>
+            <div class="pdf-opt-desc">家族介绍，谱首第一页</div>
+          </div>
+          <div class="pdf-opt on" id="po-list" onclick="this.classList.toggle('on')">
+            <div class="pdf-opt-title">⊙ 族员名录</div>
+            <div class="pdf-opt-desc">按辈分排列全部族员</div>
+          </div>
+          <div class="pdf-opt on" id="po-tree" onclick="this.classList.toggle('on')">
+            <div class="pdf-opt-title">❖ 世系关系</div>
+            <div class="pdf-opt-desc">父子传承关系说明</div>
+          </div>
+          <div class="pdf-opt on" id="po-photos" onclick="this.classList.toggle('on')">
+            <div class="pdf-opt-title">◉ 族员照片</div>
+            <div class="pdf-opt-desc">按辈分排序照片集</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>家族名称</label>
+            <input id="pdf-clan" placeholder="例：清河张氏家谱"
+                   oninput="document.getElementById('pdf-title').textContent=this.value||'家族族谱'">
+          </div>
+          <div class="form-group">
+            <label>版次说明</label>
+            <input id="pdf-ed" placeholder="例：二〇二五年续修本">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doGenPDF()">⬇ 生成并下载 PDF</button>
+        </div>
+        <div id="pdf-msg" style="margin-top:8px;font-size:12px;color:#6b5540"></div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /app-screen -->
+
+<!-- Modal -->
+<div class="modal-bg" id="modal" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="modal-title">族员详情</h3>
+      <button class="modal-x" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast" onclick="this.classList.remove('show')"></div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────
+const SB_URL = 'https://zrlqijlnlhahdpudojov.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpybHFpamxubGhhaGRwdWRvam92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NzE4NDAsImV4cCI6MjA5MDE0Nzg0MH0.HCcDEVCdVUOrTei-dFjAXA7paiC-Elo0vmlHqsaO2rI';
+
+// ─── STATE ────────────────────────────────────────────────
+let db, me, members = [], photos = [], pref = {};
+let treeScale = 1, photoSort = 'gen', editId = null;
+
+// ─── INIT ─────────────────────────────────────────────────
+window.onload = function() {
+  const { createClient } = supabase;
+  db = createClient(SB_URL, SB_KEY);
+
+  db.auth.onAuthStateChange(async (evt, session) => {
+    if (evt === 'SIGNED_IN' && session) {
+      await loadUser(session.user);
+      showScreen('app');
+    } else if (evt === 'SIGNED_OUT') {
+      me = null;
+      showScreen('auth');
+    }
+  });
+
+  db.auth.getSession().then(({ data: { session } }) => {
+    if (session) {
+      loadUser(session.user).then(() => showScreen('app'));
+    }
+  });
+};
+
+// ─── SCREENS ──────────────────────────────────────────────
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(name + '-screen').classList.add('active');
+  if (name === 'app') loadAll();
+}
+
+// ─── TABS ─────────────────────────────────────────────────
+function showTab(name) {
+  const tabNames = ['add','search','tree','photos','preface','pdf'];
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', tabNames[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'tree') renderTree();
+  if (name === 'search') doSearch();
+}
+
+// ─── AUTH ─────────────────────────────────────────────────
+function showState(s) {
+  ['email','sent','password'].forEach(n => {
+    document.getElementById('state-' + n).style.display = n === s ? '' : 'none';
+  });
+  clearAuthMsg();
+}
+
+function showAuthMsg(txt, isErr) {
+  const el = document.getElementById('auth-msg');
+  el.textContent = txt;
+  el.className = 'msg ' + (isErr ? 'error' : 'success') + ' show';
+}
+function clearAuthMsg() {
+  document.getElementById('auth-msg').className = 'msg';
+}
+
+async function doSendLink() {
+  const email = document.getElementById('inp-email').value.trim();
+  if (!email || !email.includes('@')) { showAuthMsg('请输入正确的邮箱地址', true); return; }
+  const btn = document.getElementById('send-btn');
+  btn.textContent = '发送中…'; btn.disabled = true;
+  clearAuthMsg();
+  const redirectTo = window.location.href.split('#')[0].split('?')[0];
+  const { error } = await db.auth.signInWithOtp({
+    email, options: { emailRedirectTo: redirectTo, shouldCreateUser: true }
+  });
+  btn.textContent = '发送登录链接'; btn.disabled = false;
+  if (error) { showAuthMsg('发送失败：' + error.message, true); return; }
+  document.getElementById('sent-to').textContent = email;
+  showState('sent');
+}
+
+async function doPasswordLogin() {
+  const email = document.getElementById('inp-pw-email').value.trim();
+  const pass  = document.getElementById('inp-pw-pass').value;
+  if (!email || !pass) { showAuthMsg('请填写邮箱和密码', true); return; }
+  clearAuthMsg();
+  const { error } = await db.auth.signInWithPassword({ email, password: pass });
+  if (error) showAuthMsg('登录失败：' + error.message, true);
+}
+
+async function doLogout() {
+  await db.auth.signOut();
+}
+
+async function loadUser(user) {
+  const { data: p } = await db.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  me = { id: user.id, email: user.email,
+         name: p?.display_name || user.email.split('@')[0],
+         role: p?.role || 'member' };
+  if (!p) {
+    await db.from('profiles').upsert(
+      { id: user.id, display_name: me.name, role: 'member' },
+      { onConflict: 'id', ignoreDuplicates: true }
+    );
+  }
+  document.getElementById('user-nm').textContent = me.name;
+  document.getElementById('user-av').textContent = me.name.charAt(0);
+}
+
+// ─── LOAD DATA ────────────────────────────────────────────
+async function loadAll() {
+  await loadMembers();
+  await loadPhotos();
+  await loadPreface();
+}
+
+async function loadMembers() {
+  const { data, error } = await db.from('members').select('*').order('created_at');
+  if (error) { toast('❌ 加载族员失败：' + error.message, true); return; }
+  members = (data || []).map(r => ({
+    id: r.id, by: r.created_by, byEmail: r.created_by_email,
+    name: r.name, style: r.style, gender: r.gender, birth: r.birth,
+    hometown: r.hometown, location: r.location, father: r.father_name,
+    spouse: r.spouse, gen: r.generation, clan: r.clan,
+    job: r.occupation, notes: r.notes
+  }));
+  renderMembers();
+  updateStats();
+}
+
+async function loadPhotos() {
+  const { data } = await db.from('photos').select('*').order('upload_time');
+  photos = (data || []).map(r => ({
+    id: r.id, by: r.created_by, url: r.data_url,
+    name: r.file_name, to: r.assigned_to
+  }));
+  renderPhotos();
+}
+
+async function loadPreface() {
+  const { data } = await db.from('preface').select('*').limit(1).maybeSingle();
+  if (data) {
+    pref = { name: data.clan_name, year: data.year, anc: data.ancestor, text: data.text };
+    if (pref.name) document.getElementById('pref-name').value = pref.name || '';
+    if (pref.year) document.getElementById('pref-year').value = pref.year || '';
+    if (pref.anc)  document.getElementById('pref-anc').value  = pref.anc  || '';
+    if (pref.text) document.getElementById('pref-text').value = pref.text || '';
+    previewPreface();
+    if (pref.name) document.getElementById('app-title').textContent = pref.name + '家谱';
+  }
+}
+
+// ─── MEMBER CRUD ──────────────────────────────────────────
+function isMine(m) {
+  return m && me && (m.by === me.id || me.role === 'admin');
+}
+
+function vv(id) { return (document.getElementById(id)?.value || '').trim(); }
+
+async function doSaveMember() {
+  const name = vv('f-name'), gender = vv('f-gender');
+  if (!name)   { toast('请填写族员姓名', true); return; }
+  if (!gender) { toast('请选择性别', true);     return; }
+
+  const row = {
+    name, style: vv('f-style'), gender, birth: vv('f-birth'),
+    hometown: vv('f-hometown'), location: vv('f-location'),
+    father_name: vv('f-father'), spouse: vv('f-spouse'),
+    generation: vv('f-gen'), clan: vv('f-clan'),
+    occupation: vv('f-job'), notes: vv('f-notes')
+  };
+
+  if (editId) {
+    // UPDATE
+    const { error } = await db.from('members').update({...row, updated_at: new Date()}).eq('id', editId);
+    if (error) { toast('❌ 更新失败：' + error.message, true); return; }
+    const idx = members.findIndex(m => m.id === editId);
+    if (idx >= 0) members[idx] = { ...members[idx], ...mapRow({...row, id: editId, created_by: me.id}) };
+    editId = null;
+    document.getElementById('form-title').textContent = '新增族员信息';
+    document.getElementById('save-btn').textContent = '＋ 保存至云端';
+    toast('✓ 记录已更新：' + name);
+  } else {
+    // INSERT
+    const { data, error } = await db.from('members').insert({
+      ...row, created_by: me.id, created_by_email: me.email
+    }).select().single();
+    if (error) { toast('❌ 保存失败：' + error.message, true); return; }
+    members.push(mapRow(data));
+    toast('✓ 已保存至云端：' + name);
+  }
+
+  doClearForm();
+  renderMembers();
+  updateStats();
+}
+
+function mapRow(r) {
+  return { id: r.id, by: r.created_by, byEmail: r.created_by_email,
+           name: r.name, style: r.style, gender: r.gender, birth: r.birth,
+           hometown: r.hometown, location: r.location, father: r.father_name,
+           spouse: r.spouse, gen: r.generation, clan: r.clan,
+           job: r.occupation, notes: r.notes };
+}
+
+async function doDeleteMember(id, e) {
+  if (e) e.stopPropagation();
+  const m = members.find(x => x.id === id);
+  if (!m || !isMine(m)) { toast('❌ 只能删除自己录入的记录', true); return; }
+  if (!confirm('确认删除族员"' + m.name + '"？')) return;
+  const { error } = await db.from('members').delete().eq('id', id);
+  if (error) { toast('❌ 删除失败：' + error.message, true); return; }
+  members = members.filter(x => x.id !== id);
+  renderMembers(); updateStats();
+  closeModal();
+  toast('已删除：' + m.name);
+}
+
+function doEditMember(id) {
+  const m = members.find(x => x.id === id);
+  if (!m || !isMine(m)) return;
+  closeModal();
+  showTab2('add');
+  editId = id;
+  const s = (fid, val) => { const el = document.getElementById(fid); if (el) el.value = val || ''; };
+  s('f-name', m.name); s('f-style', m.style); s('f-birth', m.birth);
+  s('f-hometown', m.hometown); s('f-location', m.location);
+  s('f-father', m.father); s('f-spouse', m.spouse);
+  s('f-gen', m.gen); s('f-clan', m.clan);
+  s('f-job', m.job); s('f-notes', m.notes);
+  document.getElementById('f-gender').value = m.gender || '';
+  document.getElementById('form-title').textContent = '修改族员：' + m.name;
+  document.getElementById('save-btn').textContent = '💾 更新记录';
+  window.scrollTo(0, 0);
+  toast('正在编辑：' + m.name);
+}
+
+function doClearForm() {
+  ['f-name','f-style','f-birth','f-hometown','f-location',
+   'f-father','f-spouse','f-gen','f-clan','f-job','f-notes'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('f-gender').value = '';
+  editId = null;
+  document.getElementById('form-title').textContent = '新增族员信息';
+  document.getElementById('save-btn').textContent = '＋ 保存至云端';
+}
+
+// Helper to switch tabs without needing the event object
+function showTab2(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const names = ['add','search','tree','photos','preface','pdf'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ─── RENDER ───────────────────────────────────────────────
+function renderMembers() {
+  const el = document.getElementById('members-list');
+  if (!members.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📜</div>' +
+      '<h3>暂无族员记录</h3><p>从上方表单录入第一位族员</p></div>';
+    return;
+  }
+  el.innerHTML = members.map(m => memberCard(m)).join('');
+}
+
+function memberCard(m) {
+  const mine = isMine(m);
+  const cls  = m.gender === 'female' ? 'female' : 'male';
+  const ph   = photos.find(p => p.to === m.name);
+  const av   = ph ? `<img src="${ph.url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+                  : m.name.charAt(0);
+  return `<div class="member-card ${mine ? 'mine' : ''}" onclick="openModal('${m.id}')">
+    ${mine ? `<button class="del-btn" onclick="doDeleteMember('${m.id}',event)">✕</button>` : ''}
+    <div class="member-avatar ${cls}">${av}</div>
+    <div class="member-name">${m.name}${m.style ? ` <span style="font-size:11px;font-weight:400;color:#6b5540">（${m.style}）</span>` : ''}</div>
+    <div class="member-info">
+      ${m.birth ? `<div>生年：${m.birth}</div>` : ''}
+      ${m.hometown ? `<div>籍贯：${m.hometown.split(' ').slice(0,2).join(' ')}</div>` : ''}
+      ${m.father ? `<div>父：${m.father}</div>` : ''}
+    </div>
+    ${m.gen ? `<span class="member-tag">${m.gen}</span>` : ''}
+    <span class="member-tag" style="${mine ? 'background:rgba(26,96,48,.1);color:#1a6030;border-color:rgba(26,96,48,.3)' : ''}">${mine ? '我录入' : '他人录入'}</span>
+  </div>`;
+}
+
+function updateStats() {
+  document.getElementById('stat-members').textContent = members.length;
+  const gens = new Set(members.map(m => m.gen).filter(Boolean));
+  document.getElementById('stat-gen').textContent = gens.size || 0;
+}
+
+// ─── SEARCH ───────────────────────────────────────────────
+function doSearch() {
+  const q = (document.getElementById('search-q')?.value || '').trim().toLowerCase();
+  const el = document.getElementById('search-results');
+  if (!el) return;
+  const list = q ? members.filter(m =>
+    [m.name, m.style, m.hometown, m.location, m.gen, m.clan, m.job, m.father]
+      .some(v => v && v.toLowerCase().includes(q))
+  ) : members;
+  el.innerHTML = list.length ? list.map(m => memberCard(m)).join('')
+    : '<div class="empty"><div class="empty-icon">🔍</div><h3>未找到</h3></div>';
+}
+
+function doRelation() {
+  const an = (document.getElementById('rel-a')?.value || '').trim();
+  const bn = (document.getElementById('rel-b')?.value || '').trim();
+  const el = document.getElementById('rel-out');
+  if (!el) return;
+  el.style.display = 'block';
+  const a = members.find(m => m.name.includes(an));
+  const b = members.find(m => m.name.includes(bn));
+  if (!a || !b) { el.innerHTML = '<div class="notice err">未找到对应族员</div>'; return; }
+  let rel = '关系待定', detail = '';
+  if (b.father === a.name) { rel = `${a.name} 是 ${b.name} 的父亲`; detail = '直系一代'; }
+  else if (a.father === b.name) { rel = `${b.name} 是 ${a.name} 的父亲`; detail = '直系一代'; }
+  else if (a.father === b.father && a.father) { rel = `${a.name} 与 ${b.name} 是兄弟/姐妹`; detail = '同父：' + a.father; }
+  else if (a.gen === b.gen && a.clan === b.clan && a.gen) { rel = '同辈族人'; detail = a.gen + ' · ' + a.clan; }
+  else if (a.clan === b.clan && a.clan) { rel = '同族远亲'; detail = '同属 ' + a.clan; }
+  el.innerHTML = `<div class="notice ok"><strong>${rel}</strong>${detail ? ' — ' + detail : ''}</div>`;
+}
+
+// ─── TREE ─────────────────────────────────────────────────
+function renderTree() {
+  const svg = document.getElementById('tree-svg');
+  if (!svg) return;
+  if (!members.length) {
+    svg.setAttribute('width', '400'); svg.setAttribute('height', '120');
+    svg.innerHTML = `<text x="200" y="60" text-anchor="middle" fill="#6b5540" font-size="13">请先录入族员</text>`;
+    return;
+  }
+  const childOf = {}, hasParent = {};
+  members.forEach(m => {
+    if (m.father) {
+      if (!childOf[m.father]) childOf[m.father] = [];
+      if (members.find(x => x.name === m.father)) { childOf[m.father].push(m); hasParent[m.id] = true; }
+    }
+  });
+  const roots = members.filter(m => !hasParent[m.id]);
+  const levels = [];
+  function place(m, lv) {
+    if (!levels[lv]) levels[lv] = [];
+    levels[lv].push(m);
+    (childOf[m.name] || []).forEach(c => place(c, lv + 1));
+  }
+  roots.forEach(r => place(r, 0));
+  const W = 112, H = 50, LH = 100, G = 16;
+  const pos = {};
+  const svgW = Math.max(560, levels.reduce((a, lv) => Math.max(a, lv.length * (W + G)), 0) + 80);
+  const svgH = levels.length * LH + 60;
+  levels.forEach((lv, li) => {
+    const total = lv.length * W + (lv.length - 1) * G;
+    const sx = (svgW - total) / 2;
+    lv.forEach((m, i) => { pos[m.id] = { x: sx + i * (W + G), y: 24 + li * LH }; });
+  });
+  svg.setAttribute('width', svgW); svg.setAttribute('height', svgH);
+  svg.style.transform = `scale(${treeScale})`; svg.style.transformOrigin = 'top left';
+  let h = `<defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="#c4a070" stroke-width="1.5" stroke-linecap="round"/></marker></defs>`;
+  members.forEach(m => {
+    if (!m.father) return;
+    const par = members.find(x => x.name === m.father);
+    if (!par || !pos[m.id] || !pos[par.id]) return;
+    const px = pos[par.id].x + W/2, py = pos[par.id].y + H;
+    const cx = pos[m.id].x + W/2, cy = pos[m.id].y;
+    const mid = (py + cy) / 2;
+    h += `<path d="M${px} ${py} C${px} ${mid} ${cx} ${mid} ${cx} ${cy}"
+      fill="none" stroke="#d4b896" stroke-width="1.2" marker-end="url(#ar)"/>`;
+  });
+  members.forEach(m => {
+    const p = pos[m.id]; if (!p) return;
+    const isMale = m.gender === 'male';
+    const bg = isMale ? '#EEF3FC' : '#FCF0F3';
+    const stroke = isMale ? '#7090C0' : '#C07090';
+    const tc = isMale ? '#2a4a8a' : '#8a2a50';
+    const mine = isMine(m);
+    h += `<g onclick="openModal('${m.id}')" style="cursor:pointer">
+      <rect x="${p.x}" y="${p.y}" width="${W}" height="${H}" rx="8"
+        fill="${bg}" stroke="${mine ? '#c8882a' : stroke}" stroke-width="${mine ? 1.5 : 1}"/>
+      ${mine ? `<rect x="${p.x}" y="${p.y}" width="${W}" height="3" rx="1.5" fill="#c8882a"/>` : ''}
+      <text x="${p.x+W/2}" y="${p.y+16}" text-anchor="middle" font-size="12"
+        font-weight="600" fill="${tc}" font-family="Noto Sans SC,sans-serif">${m.name}</text>
+      <text x="${p.x+W/2}" y="${p.y+31}" text-anchor="middle" font-size="10"
+        fill="#6b5540" font-family="Noto Sans SC,sans-serif">
+        ${(m.birth || '') + (m.gen ? '·' + m.gen.replace('第','').replace('世','世') : '')}</text>
+      <text x="${p.x+W/2}" y="${p.y+44}" text-anchor="middle" font-size="9"
+        fill="#7a5010" font-family="Noto Sans SC,sans-serif">
+        ${m.hometown ? m.hometown.split(' ')[0] : ''}</text>
+    </g>`;
+  });
+  svg.innerHTML = h;
+}
+
+function doZoom(f) {
+  treeScale = f === 1 ? 1 : Math.max(0.3, Math.min(3, treeScale * f));
+  const s = document.getElementById('tree-svg');
+  if (s) s.style.transform = `scale(${treeScale})`;
+}
+
+// ─── PHOTOS ───────────────────────────────────────────────
+async function doUploadPhotos(e) {
+  const files = Array.from(e.target.files);
+  for (const file of files) {
+    const dataUrl = await readFile(file);
+    const { data, error } = await db.from('photos').insert({
+      created_by: me.id, data_url: dataUrl,
+      file_name: file.name, assigned_to: ''
+    }).select().single();
+    if (error) { toast('❌ 上传失败：' + error.message, true); continue; }
+    photos.push({ id: data.id, by: me.id, url: dataUrl, name: file.name, to: '' });
+  }
+  renderPhotos(); updateStats();
+  toast('✓ 已上传 ' + files.length + ' 张照片');
+  e.target.value = '';
+}
+
+function readFile(file) {
+  return new Promise(res => {
+    const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(file);
+  });
+}
+
+async function doAssignPhoto(pid, name) {
+  const p = photos.find(x => x.id === pid); if (!p) return;
+  p.to = name;
+  await db.from('photos').update({ assigned_to: name }).eq('id', pid);
+  renderPhotos(); renderMembers();
+  toast('已关联：' + name);
+}
+
+async function doDeletePhoto(pid) {
+  await db.from('photos').delete().eq('id', pid);
+  photos = photos.filter(x => x.id !== pid);
+  renderPhotos(); renderMembers();
+  toast('照片已删除');
+}
+
+function doSortPhotos(mode) {
+  photoSort = mode;
+  renderPhotos();
+}
+
+function getSortedPhotos() {
+  const arr = [...photos];
+  if (photoSort === 'gen') arr.sort((a, b) => {
+    const ma = members.find(m => m.name === a.to);
+    const mb = members.find(m => m.name === b.to);
+    return (parseInt(ma?.gen) || 99) - (parseInt(mb?.gen) || 99);
+  });
+  else if (photoSort === 'birth') arr.sort((a, b) => {
+    const ma = members.find(m => m.name === a.to);
+    const mb = members.find(m => m.name === b.to);
+    return (parseInt(ma?.birth) || 9999) - (parseInt(mb?.birth) || 9999);
+  });
+  else arr.sort((a, b) => (a.to || a.name).localeCompare(b.to || b.name, 'zh'));
+  return arr;
+}
+
+function renderPhotos() {
+  const el = document.getElementById('photo-grid'); if (!el) return;
+  if (!photos.length) {
+    el.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🖼️</div><h3>尚无照片</h3><p>上传后按辈分自动排列</p></div>';
+    return;
+  }
+  const opts = ['<option value="">— 关联族员 —</option>',
+    ...members.map(m => `<option value="${m.name}">${m.name}</option>`)].join('');
+  el.innerHTML = getSortedPhotos().map(p => {
+    const mbr = members.find(m => m.name === p.to);
+    const sel = opts.replace(`value="${p.to}"`, `value="${p.to}" selected`);
+    return `<div class="photo-item">
+      <img src="${p.url}" alt="${p.to || p.name}">
+      <div class="photo-overlay"><div class="photo-name">${p.to || p.name}</div>
+        ${mbr ? `<div style="font-size:9px;color:rgba(245,217,154,.7)">${mbr.gen || ''}</div>` : ''}</div>
+      <div class="assign-sel"><select onchange="doAssignPhoto('${p.id}',this.value)">${sel}</select></div>
+      <button class="photo-del" onclick="doDeletePhoto('${p.id}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ─── PREFACE ──────────────────────────────────────────────
+function previewPreface() {
+  const name = vv('pref-name'), year = vv('pref-year');
+  const anc  = vv('pref-anc'),  text = vv('pref-text');
+  const el = document.getElementById('pref-preview'); if (!el) return;
+  if (!name && !text) { el.textContent = '序言将在此显示…'; return; }
+  let html = '';
+  if (name) html += `<div style="text-align:center;font-size:17px;font-weight:700;letter-spacing:4px;margin-bottom:6px">${name}</div>`;
+  if (year) html += `<div style="text-align:center;font-size:11px;color:#6b5540;margin-bottom:14px;letter-spacing:2px">${year}续修</div>`;
+  if (anc)  html += `<div style="font-size:12px;color:#6b5540;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #ede0c8">始迁祖：${anc}</div>`;
+  if (text) html += `<div style="white-space:pre-wrap;font-size:13px;line-height:2.1;color:#3d2e1a">${text}</div>`;
+  el.innerHTML = html;
+  if (name) document.getElementById('app-title').textContent = name + '家谱';
+}
+
+function doGenPreface() {
+  const clanName = vv('pref-name') || (members[0]?.clan || '某氏');
+  const anc = members.find(m => !m.father) || members[0];
+  const draft = `盖闻水有源，树有根，人有祖。${clanName}自始祖${anc ? anc.name : '先祖'}公迁居以来，历经数代繁衍，枝叶茂盛，散布四海。\n\n谱以联族，族以谱传。今逢盛世，承蒙族人倾力相助，合力续修家谱，以志不忘本，以告慰先祖在天之灵。\n\n本谱共录族员${members.length}人，上溯始祖，下及当代，详载出生、迁徙、婚配、职业，力求翔实。凡我族人，无论身在何处，血脉同源，望珍视此谱，传之后世。\n\n${new Date().getFullYear()}年续修`;
+  document.getElementById('pref-text').value = draft;
+  previewPreface();
+  toast('草稿已生成，可自行修改');
+}
+
+async function doSavePreface() {
+  pref = { name: vv('pref-name'), year: vv('pref-year'), anc: vv('pref-anc'), text: vv('pref-text') };
+  const { error } = await db.from('preface').upsert({
+    id: '00000000-0000-0000-0000-000000000001',
+    clan_name: pref.name, year: pref.year, ancestor: pref.anc, text: pref.text,
+    updated_at: new Date()
+  });
+  if (error) { toast('❌ 保存失败：' + error.message, true); return; }
+  toast('✓ 序言已保存至云端');
+}
+
+// ─── PDF ──────────────────────────────────────────────────
+function doGenPDF() {
+  const clanName = vv('pdf-clan') || pref.name || '家族族谱';
+  const edition  = vv('pdf-ed') || new Date().getFullYear() + '年版';
+  const sorted = [...members].sort((a, b) => (parseInt(a.gen) || 99) - (parseInt(b.gen) || 99));
+  const inclPreface = document.getElementById('po-preface').classList.contains('on');
+  const inclList    = document.getElementById('po-list').classList.contains('on');
+  const inclPhotos  = document.getElementById('po-photos').classList.contains('on');
+  let html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<style>@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap');
+body{font-family:'Noto Serif SC',serif;color:#1a1209;margin:0}
+.cover{page-break-after:always;min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;background:linear-gradient(135deg,#1a0e05,#3d2410);
+  color:#f5d99a;text-align:center;padding:60px}
+.cover h1{font-size:38px;letter-spacing:8px;margin-bottom:12px}
+.cover p{font-size:13px;letter-spacing:3px;color:rgba(245,217,154,.7)}
+.section{page-break-before:always;padding:50px 70px}
+h2{font-size:20px;letter-spacing:4px;color:#2c1a08;border-bottom:2px solid #c8882a;
+  padding-bottom:7px;margin-bottom:24px}
+.preface-text{font-size:14px;line-height:2.3;color:#3d2e1a;white-space:pre-wrap}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th{background:#2c1a08;color:#f5d99a;padding:7px 10px;font-size:11px;letter-spacing:1px}
+td{padding:7px 10px;border-bottom:1px solid #ede0c8;font-size:12px;vertical-align:top}
+tr:nth-child(even) td{background:#fdf8f0}
+.mn{font-size:13px;font-weight:700}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>`;
+  html += `<div class="cover"><h1>${clanName}</h1><p>${edition}</p>
+    <p style="margin-top:36px;font-size:11px">族员：${members.length}人</p></div>`;
+  if (inclPreface && pref.text) {
+    html += `<div class="section"><h2>谱　序</h2>
+      ${pref.anc ? `<p style="font-size:12px;color:#6b5540;margin-bottom:16px">始迁祖：${pref.anc}</p>` : ''}
+      <div class="preface-text">${pref.text}</div></div>`;
+  }
+  if (inclList) {
+    html += `<div class="section"><h2>族　员　名　录</h2><table>
+      <tr><th>姓名</th><th>辈分</th><th>出生</th><th>祖籍</th><th>父亲</th><th>配偶</th><th>职业</th></tr>
+      ${sorted.map(m => `<tr>
+        <td><span class="mn">${m.name}</span>${m.style?`<br><small style="color:#6b5540">${m.style}</small>`:''}</td>
+        <td>${m.gen||'—'}</td><td>${m.birth||'—'}</td><td>${m.hometown||'—'}</td>
+        <td>${m.father||'—'}</td><td>${m.spouse||'—'}</td><td>${m.job||'—'}</td>
+      </tr>`).join('')}</table></div>`;
+  }
+  if (inclPhotos && photos.length) {
+    const ap = getSortedPhotos().filter(p => p.to);
+    if (ap.length) {
+      html += `<div class="section"><h2>族　员　照　片</h2>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:14px">
+        ${ap.map(p => `<div style="text-align:center">
+          <img src="${p.url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:7px;border:1px solid #d4b896">
+          <div style="font-size:11px;margin-top:5px;font-weight:700;color:#3d2e1a">${p.to}</div>
+          ${members.find(m=>m.name===p.to)?.gen?`<div style="font-size:9px;color:#6b5540">${members.find(m=>m.name===p.to).gen}</div>`:''}
+        </div>`).join('')}</div></div>`;
+    }
+  }
+  html += '</body></html>';
+  const w = window.open('', '_blank', 'width=900,height=700');
+  w.document.write(html); w.document.close();
+  w.onload = () => setTimeout(() => w.print(), 800);
+  document.getElementById('pdf-msg').textContent = '✓ 打印窗口已打开，请选择「存储为PDF」';
+  toast('✓ PDF已生成');
+}
+
+// ─── MODAL ────────────────────────────────────────────────
+function openModal(id) {
+  const m = members.find(x => x.id === id); if (!m) return;
+  const mine = isMine(m);
+  const ph = photos.find(p => p.to === m.name);
+  const fields = [['性别',m.gender==='male'?'男':'女'],['生年',m.birth],['祖籍',m.hometown],
+    ['现居地',m.location],['父亲',m.father],['配偶',m.spouse],
+    ['辈分',m.gen],['堂号',m.clan],['职业',m.job]].filter(([,v])=>v);
+  document.getElementById('modal-title').textContent = m.name + (m.style ? ' · ' + m.style : '');
+  document.getElementById('modal-body').innerHTML =
+    (ph ? `<div style="text-align:center;margin-bottom:14px"><img src="${ph.url}"
+      style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid #c8882a"></div>` : '') +
+    `<table style="width:100%;font-size:12px;border-collapse:collapse">
+      ${fields.map(([k,v])=>`<tr><td style="padding:5px 0;color:#6b5540;width:55px;font-size:11px">${k}</td>
+        <td style="padding:5px 0;font-weight:600;color:#1a1209">${v}</td></tr>`).join('')}
+    </table>` +
+    (m.notes ? `<div style="margin-top:10px;padding:10px;background:#f7efe0;border-radius:7px;
+      border:1px solid #ede0c8;font-size:12px;color:#6b5540;line-height:1.8">${m.notes}</div>` : '') +
+    (m.byEmail ? `<div style="margin-top:8px;font-size:10px;color:#6b5540">录入者：${m.byEmail}</div>` : '') +
+    `<div style="display:flex;gap:8px;margin-top:14px">
+      ${mine
+        ? `<button class="btn btn-primary" onclick="doEditMember('${m.id}')" style="font-size:12px">✏️ 修改</button>
+           <button class="btn btn-danger" onclick="doDeleteMember('${m.id}')" style="font-size:12px">删除</button>`
+        : `<div style="font-size:11px;color:#6b5540;padding:6px 0">此记录由他人录入，如需修改请联系：${m.byEmail||'管理员'}</div>`}
+    </div>`;
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+
+// ─── TEST ─────────────────────────────────────────────────
+async function doTestConn() {
+  if (!db) { toast('❌ 数据库未初始化', true); return; }
+  toast('检测中…');
+  const { data, error } = await db.from('members').select('id').limit(1);
+  if (error) {
+    if (error.code === '42P01') toast('❌ 表不存在，请运行 init-clean.sql', true);
+    else toast('❌ ' + error.message, true);
+    return;
+  }
+  const { data: { user } } = await db.auth.getUser();
+  toast('✅ 连接正常，登录为：' + (user?.email || '未知'));
+}
+
+// ─── TOAST ────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, isErr) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (isErr ? ' err' : '');
+  if (toastTimer) clearTimeout(toastTimer);
+  if (!isErr) toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
+}
+</script>
+</body>
+</html>
