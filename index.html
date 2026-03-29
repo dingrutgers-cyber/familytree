@@ -1536,8 +1536,6 @@ function geocodeLocation(locationStr) {
 }
 
 function renderMap() {
-  if (!document.getElementById('tab-map').classList.contains('active')) return;
-
   // Initialize Leaflet map once
   if (!mapInitialized) {
     mapInstance = L.map('map-container', {
@@ -1550,14 +1548,22 @@ function renderMap() {
       maxZoom: 18,
     }).addTo(mapInstance);
     mapInitialized = true;
-  } else {
-    // Clear existing markers
-    mapInstance.eachLayer(layer => {
-      if (layer instanceof L.CircleMarker || layer instanceof L.Marker) {
-        mapInstance.removeLayer(layer);
-      }
-    });
   }
+
+  // CRITICAL: tell Leaflet to recalculate container size after panel becomes visible
+  setTimeout(() => {
+    mapInstance.invalidateSize();
+    doRenderMapMarkers();
+  }, 100);
+}
+
+function doRenderMapMarkers() {
+  // Clear existing markers
+  mapInstance.eachLayer(layer => {
+    if (layer instanceof L.CircleMarker || layer instanceof L.Marker) {
+      mapInstance.removeLayer(layer);
+    }
+  });
 
   // Aggregate by location
   const locMap = {}; // key → { coords, label, members: [{name, type, gen}] }
