@@ -1592,16 +1592,29 @@ table.gt td{
       // Page content width ≈ 7.2in = 691pt at 96dpi... use percent
       // Gen col: 22pt fixed. Name col: 22pt each. Info col: remaining / members
       // Express as percent of table width
-      const n = mlist.length;
-      // Use colgroup for precise widths
-      // Total = 100%, genW=3%, each member = (97%/n) split as nameW=3% + infoW=(97/n - 3)%
-      const genPct   = 3;
-      const memberPct= (97/n);
-      const namePct  = 3;
-      const infoPct  = memberPct - namePct;
+      // Calculate content length for each member to proportionally assign column widths
+      // Page content width at 0.5in/0.4in margins on Letter = ~672pt
+      // Gen label = 22pt, name col = 22pt each, remaining split by content length
+      const PAGE_PT  = 672;
+      const GEN_PT   = 22;
+      const NAME_PT  = 22;
+      const totalNamePt = NAME_PT * mlist.length;
+      const infoTotalPt = PAGE_PT - GEN_PT - totalNamePt;
+
+      // Measure content: count chars in each member's info string
+      const infoLens = mlist.map(m => Math.max(10, info(m).length));
+      const totalLen = infoLens.reduce((a,b)=>a+b, 0);
+      // Each member's info column width proportional to content length
+      const infoWidths = infoLens.map(l => Math.max(30, Math.round(infoTotalPt * l / totalLen)));
 
       // One row per member, gen label spans all rows via rowspan
-      html+=`<table class="gt">`;
+      html+=`<table class="gt" style="table-layout:fixed;width:100%"><colgroup>
+        <col style="width:${GEN_PT}pt">`;
+      mlist.forEach((_,i) => {
+        html+=`<col style="width:${NAME_PT}pt"><col style="width:${infoWidths[i]}pt">`;
+      });
+      html+=`</colgroup>`;
+
       mlist.forEach((m,idx)=>{
         const dead=!!m.death;
         const mine=isMine(m);
@@ -1618,7 +1631,7 @@ table.gt td{
             ${dead?'<span class="vt-cross">✝</span>':''}${m.name}
           </span>
         </td>
-        <td class="ic${deadCls}">
+        <td class="ic${deadCls}" style="width:${infoWidths[idx]}pt">
           <span class="vt vt-info${deadCls}">${txt}</span>
         </td></tr>`;
       });
