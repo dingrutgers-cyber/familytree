@@ -168,6 +168,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
 .member-name{font-size:14px;font-weight:700;color:#1a1209;margin-bottom:3px}
 .member-info{font-size:11px;color:#6b5540;line-height:1.5}
 .member-tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;
+.member-card.deceased{opacity:.82;background:linear-gradient(135deg,#f8f5f0,#f0ebe0)}
   margin-top:6px;background:rgba(200,136,42,.1);color:#7a5010;
   border:1px solid rgba(200,136,42,.25)}
 .del-btn{position:absolute;top:7px;right:7px;width:20px;height:20px;
@@ -395,7 +396,10 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
           <div class="form-group"><label>性别 *</label>
             <select id="f-gender"><option value="">— 选择 —</option>
               <option value="male">男</option><option value="female">女</option></select></div>
-          <div class="form-group"><label>出生年份</label><input id="f-birth" placeholder="例：1958"></div>
+          <div class="form-group"><label>出生年份</label><input id="f-birth" placeholder="例：1958 或 民国47年"></div>
+          <div class="form-group"><label>出生月份</label><input id="f-birth-date" placeholder="例：1958年3月"></div>
+          <div class="form-group"><label>去世年份</label><input id="f-death" placeholder="例：2005（在世请留空）"></div>
+          <div class="form-group"><label>去世月份</label><input id="f-death-date" placeholder="例：2005年7月"></div>
           <div class="form-group"><label>祖籍</label><input id="f-hometown" placeholder="例：湖南省 长沙县"></div>
           <div class="form-group"><label>现居地</label><input id="f-location" placeholder="例：广东省 深圳市"></div>
           <div class="form-group"><label>父亲姓名</label><input id="f-father" placeholder="建立父子关联"></div>
@@ -779,6 +783,7 @@ async function doSaveMember() {
 
   const row = {
     name, style: vv('f-style'), gender, birth: vv('f-birth'),
+    birth_date: vv('f-birth-date'), death: vv('f-death'), death_date: vv('f-death-date'),
     hometown: vv('f-hometown'), location: vv('f-location'),
     father_name: vv('f-father'), spouse: vv('f-spouse'),
     generation: vv('f-gen'), clan: vv('f-clan'),
@@ -813,6 +818,7 @@ async function doSaveMember() {
 function mapRow(r) {
   return { id: r.id, by: r.created_by, byEmail: r.created_by_email,
            name: r.name, style: r.style, gender: r.gender, birth: r.birth,
+           birthDate: r.birth_date, death: r.death, deathDate: r.death_date,
            hometown: r.hometown, location: r.location, father: r.father_name,
            spouse: r.spouse, gen: r.generation, clan: r.clan,
            job: r.occupation, notes: r.notes };
@@ -839,6 +845,7 @@ function doEditMember(id) {
   editId = id;
   const s = (fid, val) => { const el = document.getElementById(fid); if (el) el.value = val || ''; };
   s('f-name', m.name); s('f-style', m.style); s('f-birth', m.birth);
+  s('f-birth-date', m.birthDate); s('f-death', m.death); s('f-death-date', m.deathDate);
   s('f-hometown', m.hometown); s('f-location', m.location);
   s('f-father', m.father); s('f-spouse', m.spouse);
   s('f-gen', m.gen); s('f-clan', m.clan);
@@ -851,7 +858,7 @@ function doEditMember(id) {
 }
 
 function doClearForm() {
-  ['f-name','f-style','f-birth','f-hometown','f-location',
+  ['f-name','f-style','f-birth','f-birth-date','f-death','f-death-date','f-hometown','f-location',
    'f-father','f-spouse','f-gen','f-clan','f-job','f-notes'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
@@ -936,16 +943,22 @@ function memberCard(m) {
   const ph   = photos.find(p => p.to === m.name);
   const av   = ph ? `<img src="${ph.url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
                   : m.name.charAt(0);
-  return `<div class="member-card ${mine ? 'mine' : ''}" onclick="openModal('${m.id}')">
+  const isDead = !!m.death;
+  // Compute lifespan if both birth and death are known
+  const lifespan = (m.birth && m.death)
+    ? (() => { const b=parseInt(m.birth), d=parseInt(m.death); return (!isNaN(b)&&!isNaN(d)) ? `享年${d-b}岁` : ''; })()
+    : '';
+  return `<div class="member-card ${mine ? 'mine' : ''} ${isDead ? 'deceased' : ''}" onclick="openModal('${m.id}')">
     ${mine ? `<button class="del-btn" onclick="doDeleteMember('${m.id}',event)">✕</button>` : ''}
     <div class="member-avatar ${cls}">${av}</div>
-    <div class="member-name">${m.name}${m.style ? ` <span style="font-size:11px;font-weight:400;color:#6b5540">（${m.style}）</span>` : ''}</div>
+    <div class="member-name">${isDead ? '<span style="color:#6b5540;font-size:11px">✝ </span>' : ''}${m.name}${m.style ? ` <span style="font-size:11px;font-weight:400;color:#6b5540">（${m.style}）</span>` : ''}</div>
     <div class="member-info">
-      ${m.birth ? `<div>生年：${m.birth}</div>` : ''}
+      ${m.birth||m.death ? `<div>${m.birth||'？'}${m.death ? ' — '+m.death : ''} ${lifespan}</div>` : ''}
       ${m.hometown ? `<div>籍贯：${m.hometown.split(' ').slice(0,2).join(' ')}</div>` : ''}
       ${m.father ? `<div>父：${m.father}</div>` : ''}
     </div>
     ${m.gen ? `<span class="member-tag">${m.gen}</span>` : ''}
+    ${isDead ? `<span class="member-tag" style="background:rgba(80,80,80,.08);color:#555;border-color:rgba(80,80,80,.2)">已故</span>` : ''}
     <span class="member-tag" style="${mine ? 'background:rgba(26,96,48,.1);color:#1a6030;border-color:rgba(26,96,48,.3)' : ''}">${mine ? '我录入' : '他人录入'}</span>
   </div>`;
 }
@@ -1206,9 +1219,14 @@ function renderTree() {
     const topOff = ph ? ((NW-6)+6+(mine?3:0)) : (mine?3:0);
     const avail  = NH - topOff - 14;
     const ty0    = p.y + topOff + Math.max(0,(avail-chars.length*charH)/2) + charH;
+    // Show † above name if deceased
+    if (m.death && !isVirt) {
+      h += `<text x="${p.x+NW/2}" y="${ty0 - charH + 2}" text-anchor="middle"
+        font-size="9" fill="#888" font-family="sans-serif">✝</text>`;
+    }
     chars.forEach((ch,i) => {
       h += `<text x="${p.x+NW/2}" y="${ty0+i*charH}" text-anchor="middle"
-        font-size="13" font-weight="600" fill="${tc}"
+        font-size="13" font-weight="600" fill="${m.death && !isVirt ? '#666' : tc}"
         font-family="Noto Serif SC,serif">${ch}</text>`;
     });
 
@@ -1413,10 +1431,26 @@ function openModal(id) {
   const m = members.find(x => x.id === id); if (!m) return;
   const mine = isMine(m);
   const ph = photos.find(p => p.to === m.name);
-  const fields = [['性别',m.gender==='male'?'男':'女'],['生年',m.birth],['祖籍',m.hometown],
-    ['现居地',m.location],['父亲',m.father],['配偶',m.spouse],
-    ['辈分',m.gen],['堂号',m.clan],['职业',m.job]].filter(([,v])=>v);
-  document.getElementById('modal-title').textContent = m.name + (m.style ? ' · ' + m.style : '');
+  const lifespanStr = (m.birth && m.death)
+    ? (() => { const b=parseInt(m.birth), d=parseInt(m.death); return (!isNaN(b)&&!isNaN(d)) ? `${d-b}岁` : ''; })()
+    : '';
+  const fields = [
+    ['性别', m.gender==='male'?'男':'女'],
+    ['出生年份', m.birth],
+    ['出生月份', m.birthDate],
+    ['去世年份', m.death],
+    ['去世月份', m.deathDate],
+    ['享年', lifespanStr],
+    ['祖籍', m.hometown],
+    ['现居地', m.location],
+    ['父亲', m.father],
+    ['配偶', m.spouse],
+    ['辈分', m.gen],
+    ['堂号', m.clan],
+    ['职业', m.job],
+  ].filter(([,v])=>v);
+  const isDead = !!m.death;
+  document.getElementById('modal-title').textContent = (isDead ? '✝ ' : '') + m.name + (m.style ? ' · ' + m.style : '');
   document.getElementById('modal-body').innerHTML =
     (ph ? `<div style="text-align:center;margin-bottom:14px"><img src="${ph.url}"
       style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid #c8882a"></div>` : '') +
