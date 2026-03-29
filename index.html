@@ -1406,9 +1406,25 @@ function doGenPDF() {
   // Convert all 4-digit years in a text string to Chinese
   function convertYears(text) {
     if (!text) return '';
-    return text.replace(/(\d{4})(年?)/g, (match, yr, suffix) => {
-      const cn = yr.split('').map(d=>'〇一二三四五六七八九'[d]).join('');
-      return cn + '年';
+    // Convert all sequences of Arabic digits to Chinese characters
+    // This handles years (4 digits), ages, months, days, etc.
+    return text.replace(/\d+/g, n => {
+      const digits = '〇一二三四五六七八九';
+      // For 4-digit years: digit by digit (1980 → 一九八〇)
+      if (n.length === 4 && parseInt(n) >= 1000) {
+        return n.split('').map(d => digits[d]).join('');
+      }
+      // For other numbers up to 999: use positional Chinese
+      const int = parseInt(n);
+      if (isNaN(int) || int === 0) return '〇';
+      const u = ['','十','百','千'];
+      const s = String(int); let r = '';
+      for (let i = 0; i < s.length; i++) {
+        const d = parseInt(s[i]), unit = u[s.length - 1 - i];
+        if (d === 0) { if (r && r.slice(-1) !== '〇') r += '〇'; }
+        else r += digits[d] + unit;
+      }
+      return r.replace(/^一十/, '十').replace(/〇$/, '');
     });
   }
 
@@ -1531,7 +1547,7 @@ table.gtbl{
 }
 /* Content below name */
 .mc-c{
-  writing-mode:vertical-rl;text-orientation:mixed;
+  writing-mode:vertical-rl;text-orientation:upright;
   font-size:12pt;line-height:1.85;letter-spacing:0.5pt;
   padding:6pt 5pt;
   color:#3d2e1a;word-break:break-all;
@@ -1594,13 +1610,11 @@ table.gtbl{
       mlist.forEach(m => {
         const isDead = !!m.death;
         const mine   = isMine(m);
-        const ph     = photos.find(p => p.to === m.name);
         const ct     = memberContent(m);
 
         html += `<td class="mc${isDead?' dead':''}${mine?' mine':''}">
           <span class="mc-n${isDead?' dead':''}">
             ${isDead?'<span class="crs">✝</span>':''}
-            ${ph?`<img src="${ph.url}" class="mc-ph">`:''}
             ${m.name}
           </span>
           <span class="mc-c${isDead?' dead':''}">${ct}</span>
