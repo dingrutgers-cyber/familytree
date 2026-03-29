@@ -5,6 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>丁氏家谱系统</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+#map-container { height: 520px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+.map-legend { display: flex; gap: 20px; flex-wrap: wrap; margin: 12px 0; font-size: 13px; color: var(--ink3); align-items: center; }
+.legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: middle; }
+.map-stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.map-stat { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 13px; color: var(--ink2); }
+.map-stat strong { font-size: 18px; color: var(--gold); display: block; }
+.leaflet-popup-content { font-family: var(--sans); font-size: 13px; min-width: 160px; max-width: 240px; }
+.popup-title { font-family: var(--serif); font-weight: 700; color: var(--ink2); margin-bottom: 8px; font-size: 14px; border-bottom: 1px solid var(--bg3); padding-bottom: 6px; }
+.popup-member { padding: 4px 0; border-bottom: 1px solid var(--bg3); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.popup-member:last-child { border-bottom: none; }
+.popup-member:hover { color: var(--gold); }
+.popup-badge { font-size: 10px; padding: 1px 5px; border-radius: 10px; background: var(--bg2); color: var(--ink3); }
+.popup-type { font-size: 10px; color: var(--ink3); }
+</style>
 <style>
 /* ─── Reset ─── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -355,6 +372,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
       <div class="tab" onclick="showTab('photos')">◉ 族员照片</div>
       <div class="tab" onclick="showTab('preface')">卷 家族序言</div>
       <div class="tab" onclick="showTab('pdf')">⬇ 导出PDF</div>
+      <div class="tab" onclick="showTab('map')">🗺 族人分布</div>
     </div>
   </div>
 
@@ -551,6 +569,23 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
       </div>
     </div>
 
+    <!-- MAP -->
+    <div class="panel" id="tab-map">
+      <div class="map-stats">
+        <div class="map-stat"><strong id="map-stat-cities">0</strong>城市</div>
+        <div class="map-stat"><strong id="map-stat-provinces">0</strong>省份</div>
+        <div class="map-stat"><strong id="map-stat-countries">0</strong>国家/地区</div>
+      </div>
+      <div class="map-legend">
+        <span><span class="legend-dot" style="background:#2563eb"></span>现居地</span>
+        <span style="color:var(--ink3);font-size:12px">数字 = 该地族人数量，点击查看详情</span>
+      </div>
+      <div id="map-container"></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--ink3)">
+        💡 地图根据「现居地」字段自动定位。填写越详细定位越准确，如：广东省 深圳市 南山区。
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div><!-- /app-screen -->
 
@@ -608,7 +643,7 @@ function showScreen(name) {
 
 // ─── TABS ─────────────────────────────────────────────────
 function showTab(name) {
-  const tabNames = ['add','search','tree','photos','preface','pdf'];
+  const tabNames = ['add','search','tree','photos','preface','pdf','map'];
   document.querySelectorAll('.tab').forEach((t, i) => {
     t.classList.toggle('active', tabNames[i] === name);
   });
@@ -616,6 +651,7 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'tree') renderTree();
   if (name === 'search') doSearch();
+  if (name === 'map') renderMap();
 }
 
 // ─── AUTH ─────────────────────────────────────────────────
@@ -1418,7 +1454,206 @@ async function doTestConn() {
   toast('✅ 连接正常，登录为：' + (user?.email || '未知'));
 }
 
-// ─── TOAST ────────────────────────────────────────────────
+// ─── MAP ──────────────────────────────────────────────────
+let mapInstance = null;
+let mapInitialized = false;
+
+// Built-in geocode dictionary for common Chinese cities/provinces
+// Format: 'search term' → [lat, lng]
+const GEO_DICT = {
+  // Provinces / direct-controlled municipalities
+  '北京':  [39.905, 116.391], '上海':  [31.230, 121.473],
+  '天津':  [39.125, 117.190], '重庆':  [29.563, 106.551],
+  '广东':  [23.130, 113.264], '广州':  [23.130, 113.264],
+  '深圳':  [22.543, 114.058], '东莞':  [23.020, 113.751],
+  '浙江':  [30.274, 120.155], '杭州':  [30.274, 120.155],
+  '宁波':  [29.868, 121.544], '温州':  [28.000, 120.672],
+  '江苏':  [32.061, 118.796], '南京':  [32.061, 118.796],
+  '苏州':  [31.298, 120.585], '无锡':  [31.570, 120.300],
+  '湖南':  [28.228, 112.939], '长沙':  [28.228, 112.939],
+  '湖北':  [30.593, 114.305], '武汉':  [30.593, 114.305],
+  '四川':  [30.659, 104.065], '成都':  [30.659, 104.065],
+  '山东':  [36.668, 117.020], '济南':  [36.668, 117.020],
+  '青岛':  [36.066, 120.383], '河南':  [34.765, 113.754],
+  '郑州':  [34.765, 113.754], '福建':  [26.100, 119.296],
+  '福州':  [26.100, 119.296], '厦门':  [24.479, 118.090],
+  '安徽':  [31.820, 117.228], '合肥':  [31.820, 117.228],
+  '江西':  [28.676, 115.892], '南昌':  [28.676, 115.892],
+  '陕西':  [34.263, 108.948], '西安':  [34.263, 108.948],
+  '河北':  [38.045, 114.502], '石家庄':[38.045, 114.502],
+  '辽宁':  [41.795, 123.430], '沈阳':  [41.795, 123.430],
+  '大连':  [38.914, 121.614], '吉林':  [43.887, 125.325],
+  '长春':  [43.887, 125.325], '黑龙江':[45.756, 126.642],
+  '哈尔滨':[45.756, 126.642], '内蒙古':[40.818, 111.766],
+  '呼和浩特':[40.818, 111.766], '山西':[37.873, 112.549],
+  '太原':  [37.873, 112.549], '云南':  [24.880, 102.832],
+  '昆明':  [24.880, 102.832], '贵州':  [26.599, 106.707],
+  '贵阳':  [26.599, 106.707], '广西':  [22.817, 108.366],
+  '南宁':  [22.817, 108.366], '海南':  [20.044, 110.199],
+  '海口':  [20.044, 110.199], '甘肃':  [36.061, 103.834],
+  '兰州':  [36.061, 103.834], '青海':  [36.620, 101.778],
+  '西宁':  [36.620, 101.778], '新疆':  [43.793, 87.627],
+  '乌鲁木齐':[43.793, 87.627], '西藏': [29.652, 91.132],
+  '拉萨':  [29.652, 91.132], '宁夏':  [38.467, 106.273],
+  '银川':  [38.467, 106.273],
+  // Special regions
+  '香港':  [22.319, 114.170], '澳门':  [22.163, 113.545],
+  '台湾':  [25.033, 121.565], '台北':  [25.033, 121.565],
+  // International
+  '美国':  [37.090, -95.713], '纽约':  [40.713, -74.006],
+  '洛杉矶':[34.052, -118.244],'旧金山':[37.774, -122.419],
+  '波士顿':[42.360, -71.059], '芝加哥':[41.878, -87.630],
+  '西雅图':[47.606, -122.332],'华盛顿':[38.907, -77.037],
+  '休斯顿':[29.760, -95.370], '达拉斯':[32.776, -96.797],
+  '英国':  [51.508, -0.128],  '伦敦':  [51.508, -0.128],
+  '法国':  [48.857, 2.347],   '巴黎':  [48.857, 2.347],
+  '德国':  [52.520, 13.405],  '柏林':  [52.520, 13.405],
+  '日本':  [35.690, 139.692], '东京':  [35.690, 139.692],
+  '大阪':  [34.693, 135.502], '韩国':  [37.566, 126.978],
+  '首尔':  [37.566, 126.978], '澳大利亚':[-33.869, 151.209],
+  '悉尼':  [-33.869, 151.209],'墨尔本':[-37.814, 144.963],
+  '加拿大':[43.651, -79.347], '多伦多':[43.651, -79.347],
+  '温哥华':[49.247, -123.116],'新加坡':[1.352, 103.820],
+  '马来西亚':[3.140, 101.687],'吉隆坡':[3.140, 101.687],
+};
+
+function geocodeLocation(locationStr) {
+  if (!locationStr) return null;
+  // Try progressively shorter matches
+  const parts = locationStr.split(/[\s省市区县]+/).filter(Boolean);
+  // Try full string first, then parts from most specific to least
+  const candidates = [locationStr, ...parts].reverse();
+  for (const c of candidates) {
+    for (const [key, coords] of Object.entries(GEO_DICT)) {
+      if (c.includes(key) || key.includes(c)) return { coords, label: c };
+    }
+  }
+  // Last resort: scan the original string for any dict key
+  for (const [key, coords] of Object.entries(GEO_DICT)) {
+    if (locationStr.includes(key)) return { coords, label: key };
+  }
+  return null;
+}
+
+function renderMap() {
+  if (!document.getElementById('tab-map').classList.contains('active')) return;
+
+  // Initialize Leaflet map once
+  if (!mapInitialized) {
+    mapInstance = L.map('map-container', {
+      center: [35, 105],
+      zoom: 4,
+      zoomControl: true,
+    });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+      maxZoom: 18,
+    }).addTo(mapInstance);
+    mapInitialized = true;
+  } else {
+    // Clear existing markers
+    mapInstance.eachLayer(layer => {
+      if (layer instanceof L.CircleMarker || layer instanceof L.Marker) {
+        mapInstance.removeLayer(layer);
+      }
+    });
+  }
+
+  // Aggregate by location
+  const locMap = {}; // key → { coords, label, members: [{name, type, gen}] }
+
+  function addToMap(m, locStr, type) {
+    if (!locStr) return;
+    const geo = geocodeLocation(locStr);
+    if (!geo) return;
+    const key = geo.coords.join(',');
+    if (!locMap[key]) locMap[key] = { coords: geo.coords, label: locStr, members: [] };
+    // Avoid duplicate entries for same member
+    if (!locMap[key].members.find(x => x.name === m.name && x.type === type)) {
+      locMap[key].members.push({ name: m.name, type, gen: m.gen || '', id: m.id });
+    }
+  }
+
+  members.forEach(m => {
+    if (m.location) addToMap(m, m.location, '现居');
+  });
+
+  // Draw markers
+  const cities = new Set(), provinces = new Set(), countries = new Set();
+
+  Object.values(locMap).forEach(loc => {
+    const hasLiving  = loc.members.some(x => x.type === '现居');
+    const hasHometown = loc.members.some(x => x.type === '祖籍');
+    const total = loc.members.length;
+
+    // Color: blue if has living, gold if only hometown
+    const color = '#2563eb';
+    const radius = Math.min(8 + total * 3, 28);
+
+    const marker = L.circleMarker(loc.coords, {
+      radius,
+      fillColor: color,
+      color: 'white',
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.85,
+    }).addTo(mapInstance);
+
+    // Number label
+    if (total > 1) {
+      const icon = L.divIcon({
+        html: `<div style="color:white;font-size:11px;font-weight:700;text-align:center;line-height:${radius*2}px;width:${radius*2}px;height:${radius*2}px">${total}</div>`,
+        className: '',
+        iconSize: [radius*2, radius*2],
+        iconAnchor: [radius, radius],
+      });
+      L.marker(loc.coords, { icon, interactive: false }).addTo(mapInstance);
+    }
+
+    // Popup
+    const memberRows = loc.members.map(mbr =>
+      `<div class="popup-member" onclick="closeMapPopupAndOpen('${mbr.id}')">
+        <span>👤 ${mbr.name}</span>
+        ${mbr.gen ? `<span class="popup-badge">${mbr.gen}</span>` : ''}
+      </div>`
+    ).join('');
+
+    marker.bindPopup(`
+      <div class="popup-title">📍 ${loc.label}</div>
+      <div style="max-height:200px;overflow-y:auto">${memberRows}</div>
+    `, { maxWidth: 260 });
+
+    // Track for stats
+    const label = loc.label;
+    const isAbroad = ['美国','英国','法国','德国','日本','韩国','澳大利亚','加拿大','新加坡','马来西亚'].some(c => label.includes(c));
+    if (isAbroad) {
+      countries.add(label.split(/\s/)[0]);
+    } else if (label.includes('省') || label.includes('市') || ['广东','浙江','江苏','湖南','湖北','四川','山东','福建','安徽','河南','河北','辽宁','吉林','黑龙江','广西','云南','贵州','陕西','山西','江西','甘肃','新疆','西藏','内蒙古','宁夏','青海','海南'].some(p => label.includes(p))) {
+      provinces.add(label.split(/\s/)[0]);
+    } else {
+      cities.add(label);
+    }
+  });
+
+  // Update stats
+  document.getElementById('map-stat-cities').textContent = Object.keys(locMap).length;
+  document.getElementById('map-stat-provinces').textContent = provinces.size + countries.size;
+  document.getElementById('map-stat-countries').textContent = countries.size || (provinces.size > 1 ? Math.ceil(provinces.size / 8) : 1);
+
+  // Fit bounds if we have markers
+  const allCoords = Object.values(locMap).map(l => l.coords);
+  if (allCoords.length > 0) {
+    mapInstance.fitBounds(allCoords, { padding: [40, 40], maxZoom: 8 });
+  }
+}
+
+function closeMapPopupAndOpen(memberId) {
+  // Close leaflet popup, switch to add tab, open modal
+  mapInstance.closePopup();
+  const m = members.find(x => String(x.id) === String(memberId));
+  if (m) openModal(m.id);
+}
+
 let toastTimer;
 function toast(msg, isErr) {
   const el = document.getElementById('toast');
