@@ -1403,6 +1403,15 @@ function doGenPDF() {
     return r.replace(/^一十/,'十');
   }
 
+  // Convert all 4-digit years in a text string to Chinese
+  function convertYears(text) {
+    if (!text) return '';
+    return text.replace(/(\d{4})(年?)/g, (match, yr, suffix) => {
+      const cn = yr.split('').map(d=>'〇一二三四五六七八九'[d]).join('');
+      return cn + '年';
+    });
+  }
+
   // Build content lines for one member (everything except name)
   function memberContent(m) {
     const isDead = !!m.death;
@@ -1425,7 +1434,7 @@ function doGenPDF() {
     if(m.location&&!isDead)parts.push('居'+m.location.replace(/\s+/g,'').replace(/省|自治区/,'').substring(0,6));
     if(m.job)     parts.push('业'+m.job.substring(0,8));
     if(m.clan)    parts.push(m.clan);
-    if(m.notes)   parts.push(m.notes);
+    if(m.notes)   parts.push(convertYears(m.notes));
     return parts.join('　');
   }
 
