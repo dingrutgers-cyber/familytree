@@ -1482,7 +1482,7 @@ html,body{font-family:'Noto Serif SC',serif;font-size:12pt;background:#fff;color
   padding:6pt 12pt;border-top:0.5pt solid #ede0c8;border-bottom:0.5pt solid #ede0c8}
 .ftr{text-align:center;font-size:7pt;color:#6b5540;
   margin-top:18pt;padding-top:6pt;border-top:0.4pt solid #ede0c8;letter-spacing:2pt}
-/* Genealogy table — horizontal layout: all members of a generation in ONE row */
+/* Genealogy table — 每一世一行，所有人横向并排，名字和简介均为竖排文字 */
 table.gt{
   width:100%;border-collapse:collapse;
   border:1pt solid #c8882a;
@@ -1495,7 +1495,7 @@ table.gt td{
   padding:0;
   vertical-align:top;
 }
-/* Generation label cell — narrow left column */
+/* Generation label cell */
 .gc{
   width:22pt;
   background:linear-gradient(180deg,#2c1a08,#3d2410);
@@ -1503,40 +1503,22 @@ table.gt td{
   text-align:center;
   vertical-align:middle;
 }
-/* Each member occupies one <td> with name + info stacked vertically inside */
-.mc{
+/* Name cell — narrow, vertical name text */
+.nc{
+  width:22pt;
+  border-right:0.5pt solid #d4b896 !important;
   background:#fff;
+  text-align:center;
   vertical-align:top;
-  border-right:1pt solid #c4a070 !important;
-  padding:4pt 5pt;
 }
-.mc:last-child{ border-right:none !important; }
-.mc.dead{ background:#f7f5f2; }
-.mc.mine{ border-top:2pt solid #c8882a !important; }
-/* Member name — horizontal, bold */
-.mn{
-  font-family:'Noto Serif SC',serif;
-  font-size:11pt;
-  font-weight:700;
-  color:#1a1209;
-  display:block;
-  margin-bottom:3pt;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.mn.dead{ color:#666; }
-/* Member info — smaller horizontal text, wraps naturally */
-.mi{
-  font-family:'Noto Serif SC',serif;
-  font-size:8pt;
-  color:#3d2e1a;
-  line-height:1.6;
-  word-break:break-all;
-}
-.mi.dead{ color:#777; }
-.dead-mark{ font-size:8pt; color:#999; margin-right:2pt; }
-/* Vertical generation label text */
+.nc.dead{background:#f7f5f2}
+.nc.mine{border-left:1.5pt solid #c8882a !important}
+/* Info cell — vertical info text */
+.ic{background:#fff;vertical-align:top}
+.ic.dead{background:#f7f5f2}
+/* Bold separator between members (right border of each member's info cell) */
+.ic.sep{border-right:1.5pt solid #c4a070 !important}
+/* Vertical text */
 .vt{
   display:block;
   writing-mode:vertical-rl;
@@ -1601,45 +1583,58 @@ table.gt td{
   <div class="sec-rule"><span>◆</span></div>`;
 
     Object.entries(byGen).forEach(([gen,mlist])=>{
-      // ── Horizontal layout: all members of a generation in ONE row ──
-      // Page usable width (Letter, 0.4in margins each side): ~672pt
-      // Gen label col: 22pt. Remaining split equally among members per chunk.
+      // ── 同一世所有人横排，名字和简介均为竖排文字 ──
+      // 结构：[世代标签竖排] | [姓名竖排][简介竖排] | [姓名竖排][简介竖排] | ...
+      // 每人占两列（姓名列22pt + 简介列按内容分配），成员间用较粗竖线分隔
       const PAGE_PT = 672;
       const GEN_PT  = 22;
-      // How many members fit per row before wrapping to a new table?
-      // Each member cell needs at least ~60pt to be readable; aim for ~80pt each.
-      const MEMBER_MIN_PT = 60;
+      const NAME_PT = 22;
       const availPt = PAGE_PT - GEN_PT;
-      const perRow  = Math.max(1, Math.floor(availPt / MEMBER_MIN_PT));
-      // Split mlist into chunks that each fit on one row
+
+      // 每人最少需要NAME_PT + 30pt简介列 = 52pt，页面最多放几人
+      const MIN_INFO_PT = 30;
+      const perRow = Math.max(1, Math.floor(availPt / (NAME_PT + MIN_INFO_PT)));
+
+      // 按perRow分块，人太多时换下一张表（标注"续"）
       const chunks = [];
       for(let i=0;i<mlist.length;i+=perRow) chunks.push(mlist.slice(i,i+perRow));
 
-      chunks.forEach((chunk,ci)=>{
-        const colW = Math.floor(availPt / chunk.length);
-        // colgroup: gen label + one col per member
-        html+=`<table class="gt"><colgroup>
-          <col style="width:${GEN_PT}pt">`;
-        chunk.forEach(()=>{ html+=`<col style="width:${colW}pt">`; });
+      chunks.forEach((chunk, ci)=>{
+        // 简介列宽按内容长度比例分配
+        const infoLens = chunk.map(m => Math.max(10, info(m).length));
+        const totalLen = infoLens.reduce((a,b)=>a+b, 0);
+        const infoAvail = availPt - NAME_PT * chunk.length;
+        const infoWidths = infoLens.map(l =>
+          Math.max(MIN_INFO_PT, Math.round(infoAvail * l / totalLen))
+        );
+
+        // colgroup
+        html+=`<table class="gt"><colgroup><col style="width:${GEN_PT}pt">`;
+        chunk.forEach((_,i)=>{
+          html+=`<col style="width:${NAME_PT}pt"><col style="width:${infoWidths[i]}pt">`;
+        });
         html+=`</colgroup><tbody><tr>`;
 
-        // Gen label cell — show "(续)" for continuation chunks
-        const genLabel = ci===0 ? gen : gen+'<br><span style="font-size:7pt;opacity:.6">续</span>';
-        html+=`<td class="gc"><span class="vt" style="font-size:10pt;font-weight:700;color:#f5d99a;letter-spacing:3pt">${genLabel}</span></td>`;
+        // 世代标签列
+        const genLabel = ci===0 ? gen : gen+'（续）';
+        html+=`<td class="gc"><span class="vt" style="font-size:10pt;font-weight:700;color:#f5d99a;letter-spacing:4pt">${genLabel}</span></td>`;
 
-        chunk.forEach(m=>{
+        // 每个成员：姓名列 + 简介列，简介列右边加粗分隔线
+        chunk.forEach((m,i)=>{
           const dead=!!m.death;
           const mine=isMine(m);
           const txt=info(m);
+          const nameColor=dead?'color:#666':'';
           const deadCls=dead?' dead':'';
           const mineCls=mine?' mine':'';
-          // Lifespan badge
-          const ls=(m.birth&&m.death)?(()=>{const b=parseInt(m.birth),d=parseInt(m.death);return(!isNaN(b)&&!isNaN(d))?` · 享年${d-b}岁`:''})():'';
-          html+=`<td class="mc${deadCls}${mineCls}">
-            <span class="mn${dead?' dead':''}">
-              ${dead?'<span class="dead-mark">✝</span>':''}${m.name}${m.style?` <span style="font-weight:400;font-size:9pt;color:#6b5540">（${m.style}）</span>`:''}
+          const isLast=(i===chunk.length-1);
+          html+=`<td class="nc${deadCls}${mineCls}">
+            <span class="vt vt-name" style="${nameColor}">
+              ${dead?'<span class="vt-cross">✝</span>':''}${m.name}
             </span>
-            <span class="mi${dead?' dead':''}">${txt}${ls}</span>
+          </td>
+          <td class="ic${deadCls}${isLast?'':' sep'}" style="width:${infoWidths[i]}pt">
+            <span class="vt vt-info${deadCls}">${txt}</span>
           </td>`;
         });
 
