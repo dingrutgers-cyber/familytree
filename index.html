@@ -1365,68 +1365,193 @@ async function doSavePreface() {
 
 // ─── PDF ──────────────────────────────────────────────────
 function doGenPDF() {
-  const clanName = vv('pdf-clan') || pref.name || '家族族谱';
-  const edition  = vv('pdf-ed') || new Date().getFullYear() + '年版';
-  const sorted = [...members].sort((a, b) => (parseInt(a.gen) || 99) - (parseInt(b.gen) || 99));
+  const clanName  = vv('pdf-clan') || pref.name || '丁氏家谱';
+  const edition   = vv('pdf-ed')  || new Date().getFullYear() + '年续修';
   const inclPreface = document.getElementById('po-preface').classList.contains('on');
   const inclList    = document.getElementById('po-list').classList.contains('on');
   const inclPhotos  = document.getElementById('po-photos').classList.contains('on');
+
+  const sorted = [...members].sort((a, b) => {
+    const ga = parseInt(a.gen) || 99, gb = parseInt(b.gen) || 99;
+    if (ga !== gb) return ga - gb;
+    return (parseInt(a.birth) || 9999) - (parseInt(b.birth) || 9999);
+  });
+
+  const byGen = {};
+  sorted.forEach(m => {
+    const g = m.gen || '未记世代';
+    if (!byGen[g]) byGen[g] = [];
+    byGen[g].push(m);
+  });
+
+  const css = `
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Noto Serif SC',serif;background:#fdf8f0;color:#1a1209}
+@media print{
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page-break{page-break-before:always}
+  .no-break{page-break-inside:avoid}
+}
+.cover{width:100%;min-height:100vh;background:linear-gradient(160deg,#1a0e05,#2c1a08 50%,#3d2410);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:80px 60px;position:relative;page-break-after:always}
+.cover::before{content:'';position:absolute;inset:0;
+  background-image:repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(200,136,42,.04) 40px,rgba(200,136,42,.04) 41px),
+  repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(200,136,42,.04) 40px,rgba(200,136,42,.04) 41px)}
+.cover-seal{width:90px;height:90px;border-radius:50%;border:2px solid #c8882a;
+  display:flex;align-items:center;justify-content:center;margin:0 auto 30px;position:relative;z-index:1}
+.cover-seal::before{content:'';position:absolute;inset:5px;border:1px solid rgba(200,136,42,.4);border-radius:50%}
+.cover-seal-char{font-size:34px;color:#f5d99a;font-weight:700;position:relative;z-index:1}
+.cover h1{font-size:42px;color:#f5d99a;letter-spacing:10px;font-weight:700;margin-bottom:14px;position:relative;z-index:1}
+.cover-sub{font-size:15px;color:rgba(200,136,42,.7);letter-spacing:4px;margin-bottom:50px;position:relative;z-index:1}
+.cover-line{width:80px;height:1px;background:rgba(200,136,42,.4);margin:0 auto 40px;position:relative;z-index:1}
+.cover-meta{font-size:13px;color:rgba(245,217,154,.5);letter-spacing:3px;line-height:2.4;position:relative;z-index:1}
+.cover-stats{display:flex;gap:40px;justify-content:center;margin-top:40px;position:relative;z-index:1}
+.cover-stat{text-align:center}
+.cover-stat-num{font-size:28px;color:#e6b060;font-weight:700}
+.cover-stat-label{font-size:11px;color:rgba(200,136,42,.6);letter-spacing:2px;margin-top:3px}
+.section{padding:60px 70px;page-break-before:always}
+.section-title{font-size:22px;letter-spacing:6px;color:#2c1a08;font-weight:700;text-align:center;margin-bottom:8px}
+.section-sub{text-align:center;font-size:12px;color:#6b5540;letter-spacing:3px;margin-bottom:30px}
+.section-rule{display:flex;align-items:center;gap:12px;margin-bottom:36px}
+.section-rule::before,.section-rule::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,transparent,#c8882a,transparent)}
+.section-rule span{font-size:16px;color:#c8882a}
+.preface-body{font-size:15px;line-height:2.5;color:#3d2e1a;text-align:justify;
+  text-indent:2em;white-space:pre-wrap;max-width:600px;margin:0 auto}
+.preface-anc{font-size:13px;color:#6b5540;text-align:center;margin-bottom:28px;
+  padding:12px 20px;border-top:1px solid #ede0c8;border-bottom:1px solid #ede0c8;letter-spacing:1px}
+.gen-section{margin-bottom:32px}
+.gen-header{display:flex;align-items:stretch;gap:0;margin-bottom:0}
+.gen-label{writing-mode:vertical-rl;text-orientation:upright;
+  font-size:13px;font-weight:700;color:#f5d99a;letter-spacing:4px;
+  background:linear-gradient(135deg,#2c1a08,#3d2410);
+  padding:14px 10px;min-height:80px;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid #c8882a;flex-shrink:0;width:36px}
+.gen-members{display:flex;flex-wrap:wrap;flex:1;
+  border:1px solid #c4a070;border-left:none;background:white}
+.member-cell{width:110px;border-right:1px solid #ede0c8;border-bottom:1px solid #ede0c8;
+  padding:10px 6px;display:flex;flex-direction:column;align-items:center;min-height:160px}
+.member-cell.deceased{background:#f8f5f0}
+.member-cell.mine{border-top:2px solid #c8882a}
+.mc-cross{font-size:9px;color:#888;margin-bottom:2px}
+.mc-photo{width:44px;height:44px;object-fit:cover;border-radius:50%;
+  border:1px solid #d4b896;margin-bottom:6px}
+.mc-name{writing-mode:vertical-rl;text-orientation:upright;
+  font-size:15px;font-weight:700;letter-spacing:4px;color:#1a1209;
+  margin:4px auto;line-height:1.4}
+.mc-name.dead{color:#666}
+.mc-style{font-size:10px;color:#6b5540;text-align:center;margin-bottom:4px}
+.mc-info{font-size:10px;color:#6b5540;line-height:1.9;text-align:center;width:100%}
+.mc-info span{display:block}
+.mc-lifespan{font-size:9px;color:#888;text-align:center;margin-top:4px;
+  padding-top:4px;border-top:1px dashed #ede0c8}
+.mc-spouse{font-size:10px;color:#c43a3a;text-align:center;margin-top:3px}
+.photo-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:18px;margin-top:20px}
+.photo-item{text-align:center}
+.photo-item img{width:100%;aspect-ratio:1;object-fit:cover;border:1px solid #d4b896;display:block}
+.photo-name{font-size:11px;margin-top:4px;font-weight:700;color:#3d2e1a;letter-spacing:1px}
+.photo-info{font-size:9px;color:#6b5540;margin-top:2px}
+.page-footer{text-align:center;font-size:10px;color:#6b5540;
+  margin-top:50px;padding-top:14px;border-top:1px solid #ede0c8;letter-spacing:2px}
+`;
+
   let html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
-<style>@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap');
-body{font-family:'Noto Serif SC',serif;color:#1a1209;margin:0}
-.cover{page-break-after:always;min-height:100vh;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;background:linear-gradient(135deg,#1a0e05,#3d2410);
-  color:#f5d99a;text-align:center;padding:60px}
-.cover h1{font-size:38px;letter-spacing:8px;margin-bottom:12px}
-.cover p{font-size:13px;letter-spacing:3px;color:rgba(245,217,154,.7)}
-.section{page-break-before:always;padding:50px 70px}
-h2{font-size:20px;letter-spacing:4px;color:#2c1a08;border-bottom:2px solid #c8882a;
-  padding-bottom:7px;margin-bottom:24px}
-.preface-text{font-size:14px;line-height:2.3;color:#3d2e1a;white-space:pre-wrap}
-table{width:100%;border-collapse:collapse;margin-top:10px}
-th{background:#2c1a08;color:#f5d99a;padding:7px 10px;font-size:11px;letter-spacing:1px}
-td{padding:7px 10px;border-bottom:1px solid #ede0c8;font-size:12px;vertical-align:top}
-tr:nth-child(even) td{background:#fdf8f0}
-.mn{font-size:13px;font-weight:700}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style></head><body>`;
-  html += `<div class="cover"><h1>${clanName}</h1><p>${edition}</p>
-    <p style="margin-top:36px;font-size:11px">族员：${members.length}人</p></div>`;
+<title>${clanName}</title><style>${css}</style></head><body>
+<div class="cover">
+  <div class="cover-seal"><div class="cover-seal-char">丁</div></div>
+  <h1>${clanName}</h1>
+  <div class="cover-sub">${edition}</div>
+  <div class="cover-line"></div>
+  <div class="cover-meta">丁氏一脉 · 血脉相承 · 薪火相传</div>
+  <div class="cover-stats">
+    <div class="cover-stat"><div class="cover-stat-num">${members.length}</div><div class="cover-stat-label">族　员</div></div>
+    <div class="cover-stat"><div class="cover-stat-num">${Object.keys(byGen).length}</div><div class="cover-stat-label">世　代</div></div>
+    <div class="cover-stat"><div class="cover-stat-num">${members.filter(m=>m.death).length}</div><div class="cover-stat-label">已　故</div></div>
+  </div>
+</div>`;
+
   if (inclPreface && pref.text) {
-    html += `<div class="section"><h2>谱　序</h2>
-      ${pref.anc ? `<p style="font-size:12px;color:#6b5540;margin-bottom:16px">始迁祖：${pref.anc}</p>` : ''}
-      <div class="preface-text">${pref.text}</div></div>`;
+    html += `<div class="section page-break">
+  <div class="section-title">谱　　序</div>
+  ${pref.name?`<div class="section-sub">${pref.name}</div>`:''}
+  <div class="section-rule"><span>◆</span></div>
+  ${pref.anc?`<div class="preface-anc">始迁祖：${pref.anc}</div>`:''}
+  <div class="preface-body">${pref.text}</div>
+  <div class="page-footer">${clanName} · ${edition}</div>
+</div>`;
   }
+
   if (inclList) {
-    html += `<div class="section"><h2>族　员　名　录</h2><table>
-      <tr><th>姓名</th><th>辈分</th><th>出生</th><th>祖籍</th><th>父亲</th><th>配偶</th><th>职业</th></tr>
-      ${sorted.map(m => `<tr>
-        <td><span class="mn">${m.name}</span>${m.style?`<br><small style="color:#6b5540">${m.style}</small>`:''}</td>
-        <td>${m.gen||'—'}</td><td>${m.birth||'—'}</td><td>${m.hometown||'—'}</td>
-        <td>${m.father||'—'}</td><td>${m.spouse||'—'}</td><td>${m.job||'—'}</td>
-      </tr>`).join('')}</table></div>`;
+    html += `<div class="section page-break">
+  <div class="section-title">世　系　名　录</div>
+  <div class="section-sub">按世代排列 · 共 ${members.length} 人</div>
+  <div class="section-rule"><span>◆</span></div>`;
+
+    Object.entries(byGen).forEach(([gen, mlist]) => {
+      html += `<div class="gen-section no-break"><div class="gen-header">
+      <div class="gen-label">${gen}</div>
+      <div class="gen-members">`;
+      mlist.forEach(m => {
+        const isDead = !!m.death;
+        const lifespan = (m.birth && m.death)
+          ? (()=>{const b=parseInt(m.birth),d=parseInt(m.death);return(!isNaN(b)&&!isNaN(d))?`享年${d-b}岁`:''})()
+          : '';
+        const mine = isMine(m);
+        const ph = photos.find(p => p.to === m.name);
+        html += `<div class="member-cell ${isDead?'deceased':''} ${mine?'mine':''}">
+          ${isDead?'<div class="mc-cross">✝</div>':''}
+          ${ph?`<img src="${ph.url}" class="mc-photo">`:''}
+          <div class="mc-name ${isDead?'dead':''}">${m.name}</div>
+          ${m.style?`<div class="mc-style">字：${m.style}</div>`:''}
+          <div class="mc-info">
+            ${m.birth?`<span>生：${m.birthDate||m.birth}</span>`:''}
+            ${m.death?`<span>卒：${m.deathDate||m.death}</span>`:''}
+            ${m.father?`<span>父：${m.father}</span>`:''}
+            ${m.hometown?`<span>籍：${m.hometown.split(' ').slice(0,2).join('')}</span>`:''}
+            ${m.location&&!isDead?`<span>居：${m.location.split(' ').slice(0,2).join('')}</span>`:''}
+            ${m.job?`<span>业：${m.job}</span>`:''}
+          </div>
+          ${lifespan?`<div class="mc-lifespan">${lifespan}</div>`:''}
+          ${m.spouse?`<div class="mc-spouse">♥ ${m.spouse}</div>`:''}
+        </div>`;
+      });
+      html += `</div></div></div>`;
+    });
+
+    html += `<div class="page-footer">${clanName} · ${edition}</div></div>`;
   }
+
   if (inclPhotos && photos.length) {
     const ap = getSortedPhotos().filter(p => p.to);
     if (ap.length) {
-      html += `<div class="section"><h2>族　员　照　片</h2>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:14px">
-        ${ap.map(p => `<div style="text-align:center">
-          <img src="${p.url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:7px;border:1px solid #d4b896">
-          <div style="font-size:11px;margin-top:5px;font-weight:700;color:#3d2e1a">${p.to}</div>
-          ${allMembers().find(m=>m.name===p.to)?.gen?`<div style="font-size:9px;color:#6b5540">${allMembers().find(m=>m.name===p.to).gen}</div>`:''}
-        </div>`).join('')}</div></div>`;
+      html += `<div class="section page-break">
+  <div class="section-title">族　员　影　像</div>
+  <div class="section-sub">共 ${ap.length} 人</div>
+  <div class="section-rule"><span>◆</span></div>
+  <div class="photo-grid">`;
+      ap.forEach(p => {
+        const mbr = allMembers().find(m => m.name === p.to);
+        html += `<div class="photo-item">
+    <img src="${p.url}" alt="${p.to}">
+    <div class="photo-name">${p.to}${mbr?.death?' ✝':''}</div>
+    ${mbr?.gen?`<div class="photo-info">${mbr.gen}</div>`:''}
+    ${mbr?.birth?`<div class="photo-info">${mbr.birth}${mbr.death?' — '+mbr.death:''}</div>`:''}
+  </div>`;
+      });
+      html += `</div><div class="page-footer">${clanName} · ${edition}</div></div>`;
     }
   }
+
   html += '</body></html>';
-  const w = window.open('', '_blank', 'width=900,height=700');
+  const w = window.open('', '_blank', 'width=1000,height=800');
   w.document.write(html); w.document.close();
-  w.onload = () => setTimeout(() => w.print(), 800);
+  w.onload = () => setTimeout(() => w.print(), 1000);
   document.getElementById('pdf-msg').textContent = '✓ 打印窗口已打开，请选择「存储为PDF」';
   toast('✓ PDF已生成');
 }
 
-// ─── MODAL ────────────────────────────────────────────────
 function openModal(id) {
   const m = members.find(x => x.id === id); if (!m) return;
   const mine = isMine(m);
