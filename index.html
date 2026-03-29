@@ -1645,14 +1645,22 @@ table.gt td{
     html+=`<div class="ftr">${clanName} · ${edition}</div></div>`;
   }
 
-  // Photos
+  // Photos — 最后一页，按辈分排序
   if(inclPhotos&&photos.length){
-    const ap=getSortedPhotos().filter(p=>p.to);
+    // 按辈分排序：先按gen数字，再按birth年
+    const ap=[...photos].filter(p=>p.to).sort((a,b)=>{
+      const ma=allMembers().find(m=>m.name===a.to);
+      const mb=allMembers().find(m=>m.name===b.to);
+      const ga=parseInt(ma?.gen)||99;
+      const gb=parseInt(mb?.gen)||99;
+      if(ga!==gb)return ga-gb;
+      return (parseInt(ma?.birth)||9999)-(parseInt(mb?.birth)||9999);
+    });
     if(ap.length){
       html+=`<div class="pb">
   <div class="sec-head">
     <div class="sec-title">族　员　影　像</div>
-    <div class="sec-sub">共 ${ap.length} 人</div>
+    <div class="sec-sub">按辈分排列 · 共 ${ap.length} 人</div>
   </div>
   <div class="sec-rule"><span>◆</span></div>
   <div class="pg">`;
@@ -1662,7 +1670,7 @@ table.gt td{
     <img src="${p.url}" alt="${p.to}">
     <div class="pi-name">${p.to}${mbr?.death?' ✝':''}</div>
     ${mbr?.gen?`<div class="pi-info">${mbr.gen}</div>`:''}
-    ${mbr?.birth?`<div class="pi-info">${mbr.birth}${mbr.death?' — '+mbr.death:''}</div>`:''}
+    ${mbr?.birth?`<div class="pi-info">${mbr.birth}${mbr?.death?' — '+mbr.death:''}</div>`:''}
   </div>`;
       });
       html+=`</div><div class="ftr">${clanName} · ${edition}</div></div>`;
