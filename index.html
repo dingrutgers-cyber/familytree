@@ -1495,13 +1495,12 @@ table.gt{
   width:100%;border-collapse:collapse;
   border:1pt solid #c8882a;
   margin-bottom:7pt;
-  table-layout:fixed;   /* critical: fixed layout respects widths */
+  table-layout:auto;
 }
 table.gt td{
   border:0.5pt solid #d4b896;
   padding:0;
   vertical-align:top;
-  overflow:hidden;      /* never let content escape cell */
 }
 /* Generation label cell */
 .gc{
@@ -1601,26 +1600,19 @@ table.gt td{
       const namePct  = 3;
       const infoPct  = memberPct - namePct;
 
-      html+=`<table class="gt nob"><colgroup>
-        <col style="width:${genPct}%">`;
-      for(let i=0;i<n;i++){
-        html+=`<col style="width:${namePct}%"><col style="width:${infoPct}%">`;
-      }
-      html+=`</colgroup><tr>`;
-
-      // Gen label — vertical text
-      html+=`<td class="gc"><span class="vt" style="font-size:10pt;font-weight:700;
-        color:#f5d99a;letter-spacing:4pt;min-height:40pt">${gen}</span></td>`;
-
-      // Members
-      mlist.forEach(m=>{
+      // One row per member, gen label spans all rows via rowspan
+      html+=`<table class="gt">`;
+      mlist.forEach((m,idx)=>{
         const dead=!!m.death;
         const mine=isMine(m);
         const txt=info(m);
         const nameColor=dead?'color:#555':'';
         const deadCls=dead?' dead':'';
         const mineCls=mine?' mine':'';
-
+        html+=`<tr>`;
+        if(idx===0){
+          html+=`<td class="gc" rowspan="${mlist.length}"><span class="vt" style="font-size:10pt;font-weight:700;color:#f5d99a;letter-spacing:4pt">${gen}</span></td>`;
+        }
         html+=`<td class="nc${deadCls}${mineCls}">
           <span class="vt vt-name" style="${nameColor}">
             ${dead?'<span class="vt-cross">✝</span>':''}${m.name}
@@ -1628,10 +1620,9 @@ table.gt td{
         </td>
         <td class="ic${deadCls}">
           <span class="vt vt-info${deadCls}">${txt}</span>
-        </td>`;
+        </td></tr>`;
       });
-
-      html+=`</tr></table>`;
+      html+=`</table>`;
     });
 
     html+=`<div class="ftr">${clanName} · ${edition}</div></div>`;
