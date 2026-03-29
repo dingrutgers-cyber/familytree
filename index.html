@@ -1371,18 +1371,94 @@ function doGenPDF() {
   const inclList    = document.getElementById('po-list').classList.contains('on');
   const inclPhotos  = document.getElementById('po-photos').classList.contains('on');
 
+  // Sort by generation then birth year
   const sorted = [...members].sort((a, b) => {
     const ga = parseInt(a.gen) || 99, gb = parseInt(b.gen) || 99;
     if (ga !== gb) return ga - gb;
     return (parseInt(a.birth) || 9999) - (parseInt(b.birth) || 9999);
   });
 
+  // Group by generation
   const byGen = {};
   sorted.forEach(m => {
     const g = m.gen || '未记世代';
     if (!byGen[g]) byGen[g] = [];
     byGen[g].push(m);
   });
+
+  // Convert number to Chinese
+  function toChinese(n) {
+    if (!n) return '';
+    const nums = '零一二三四五六七八九';
+    const units = ['','十','百','千'];
+    const s = String(parseInt(n));
+    if (isNaN(parseInt(n))) return n; // not a pure number, return as-is
+    let result = '';
+    for (let i = 0; i < s.length; i++) {
+      const d = parseInt(s[i]);
+      const u = units[s.length - 1 - i];
+      if (d === 0) { if (result && result.slice(-1) !== '〇') result += '〇'; }
+      else result += nums[d] + u;
+    }
+    return result.replace(/^一十/, '十');
+  }
+
+  // Format a year in Chinese: 1958 → 一九五八年
+  function yearCN(y) {
+    if (!y) return '';
+    const m = String(y).match(/\d{4}/);
+    if (!m) return y;
+    return m[0].split('').map(d => '〇一二三四五六七八九'[d]).join('') + '年';
+  }
+
+  // Build the vertical text content for one member
+  function memberContent(m) {
+    const isDead = !!m.death;
+    const lifespan = (m.birth && m.death)
+      ? (()=>{ const b=parseInt(m.birth), d=parseInt(m.death);
+               return (!isNaN(b)&&!isNaN(d)) ? `享年${toChinese(d-b)}岁` : ''; })()
+      : '';
+
+    const lines = [];
+
+    // Name (shown in the name column separately)
+    // Style name
+    if (m.style) lines.push(`字${m.style}`);
+
+    // Birth
+    if (m.birthDate) lines.push(`生于${m.birthDate}`);
+    else if (m.birth) lines.push(`生于${yearCN(m.birth)}`);
+
+    // Death
+    if (m.death) {
+      if (m.deathDate) lines.push(`卒于${m.deathDate}`);
+      else lines.push(`卒于${yearCN(m.death)}`);
+      if (lifespan) lines.push(lifespan);
+    }
+
+    // Father
+    if (m.father) lines.push(`父${m.father}`);
+
+    // Spouse
+    if (m.spouse) lines.push(`配偶${m.spouse}`);
+
+    // Hometown
+    if (m.hometown) lines.push(`祖籍${m.hometown.replace(/\s+/g,'')}`);
+
+    // Location (only if living)
+    if (m.location && !isDead) lines.push(`居${m.location.replace(/\s+/g,'')}`);
+
+    // Occupation
+    if (m.job) lines.push(`业${m.job}`);
+
+    // Generation / clan
+    if (m.clan) lines.push(m.clan);
+
+    // Notes / biography — full text, no truncation
+    if (m.notes) lines.push('　' + m.notes); // indent with ideographic space
+
+    return lines.join('　'); // join with ideographic space as separator
+  }
 
   const css = `
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&display=swap');
@@ -1393,70 +1469,119 @@ body{font-family:'Noto Serif SC',serif;background:#fdf8f0;color:#1a1209}
   .page-break{page-break-before:always}
   .no-break{page-break-inside:avoid}
 }
-.cover{width:100%;min-height:100vh;background:linear-gradient(160deg,#1a0e05,#2c1a08 50%,#3d2410);
+
+/* ── COVER ── */
+.cover{width:100%;min-height:100vh;
+  background:linear-gradient(160deg,#1a0e05,#2c1a08 50%,#3d2410);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   text-align:center;padding:80px 60px;position:relative;page-break-after:always}
 .cover::before{content:'';position:absolute;inset:0;
   background-image:repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(200,136,42,.04) 40px,rgba(200,136,42,.04) 41px),
   repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(200,136,42,.04) 40px,rgba(200,136,42,.04) 41px)}
 .cover-seal{width:90px;height:90px;border-radius:50%;border:2px solid #c8882a;
-  display:flex;align-items:center;justify-content:center;margin:0 auto 30px;position:relative;z-index:1}
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 30px;position:relative;z-index:1}
 .cover-seal::before{content:'';position:absolute;inset:5px;border:1px solid rgba(200,136,42,.4);border-radius:50%}
 .cover-seal-char{font-size:34px;color:#f5d99a;font-weight:700;position:relative;z-index:1}
-.cover h1{font-size:42px;color:#f5d99a;letter-spacing:10px;font-weight:700;margin-bottom:14px;position:relative;z-index:1}
-.cover-sub{font-size:15px;color:rgba(200,136,42,.7);letter-spacing:4px;margin-bottom:50px;position:relative;z-index:1}
+.cover h1{font-size:42px;color:#f5d99a;letter-spacing:10px;font-weight:700;
+  margin-bottom:14px;position:relative;z-index:1}
+.cover-sub{font-size:15px;color:rgba(200,136,42,.7);letter-spacing:4px;
+  margin-bottom:50px;position:relative;z-index:1}
 .cover-line{width:80px;height:1px;background:rgba(200,136,42,.4);margin:0 auto 40px;position:relative;z-index:1}
-.cover-meta{font-size:13px;color:rgba(245,217,154,.5);letter-spacing:3px;line-height:2.4;position:relative;z-index:1}
+.cover-meta{font-size:13px;color:rgba(245,217,154,.5);letter-spacing:3px;
+  line-height:2.4;position:relative;z-index:1}
 .cover-stats{display:flex;gap:40px;justify-content:center;margin-top:40px;position:relative;z-index:1}
 .cover-stat{text-align:center}
 .cover-stat-num{font-size:28px;color:#e6b060;font-weight:700}
 .cover-stat-label{font-size:11px;color:rgba(200,136,42,.6);letter-spacing:2px;margin-top:3px}
-.section{padding:60px 70px;page-break-before:always}
-.section-title{font-size:22px;letter-spacing:6px;color:#2c1a08;font-weight:700;text-align:center;margin-bottom:8px}
-.section-sub{text-align:center;font-size:12px;color:#6b5540;letter-spacing:3px;margin-bottom:30px}
+
+/* ── SECTION ── */
+.section{padding:50px 60px;page-break-before:always}
+.section-title{font-size:22px;letter-spacing:6px;color:#2c1a08;font-weight:700;
+  text-align:center;margin-bottom:8px}
+.section-sub{text-align:center;font-size:12px;color:#6b5540;
+  letter-spacing:3px;margin-bottom:30px}
 .section-rule{display:flex;align-items:center;gap:12px;margin-bottom:36px}
-.section-rule::before,.section-rule::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,transparent,#c8882a,transparent)}
+.section-rule::before,.section-rule::after{content:'';flex:1;height:1px;
+  background:linear-gradient(90deg,transparent,#c8882a,transparent)}
 .section-rule span{font-size:16px;color:#c8882a}
-.preface-body{font-size:15px;line-height:2.5;color:#3d2e1a;text-align:justify;
-  text-indent:2em;white-space:pre-wrap;max-width:600px;margin:0 auto}
+
+/* ── PREFACE ── */
+.preface-body{font-size:15px;line-height:2.5;color:#3d2e1a;
+  text-align:justify;text-indent:2em;white-space:pre-wrap;
+  max-width:600px;margin:0 auto}
 .preface-anc{font-size:13px;color:#6b5540;text-align:center;margin-bottom:28px;
   padding:12px 20px;border-top:1px solid #ede0c8;border-bottom:1px solid #ede0c8;letter-spacing:1px}
-.gen-section{margin-bottom:32px}
-.gen-header{display:flex;align-items:stretch;gap:0;margin-bottom:0}
-.gen-label{writing-mode:vertical-rl;text-orientation:upright;
+
+/* ── GENERATION BLOCK ── */
+.gen-block{margin-bottom:0;border-bottom:2px solid #c8882a}
+.gen-block:first-child{border-top:2px solid #c8882a}
+.gen-row{display:flex;align-items:stretch;border-bottom:1px solid #ede0c8;min-height:60px}
+.gen-row:last-child{border-bottom:none}
+
+/* Generation label — vertical, shown once per gen group */
+.gen-label-cell{
+  writing-mode:vertical-rl;text-orientation:upright;
   font-size:13px;font-weight:700;color:#f5d99a;letter-spacing:4px;
-  background:linear-gradient(135deg,#2c1a08,#3d2410);
-  padding:14px 10px;min-height:80px;
+  background:linear-gradient(180deg,#2c1a08,#3d2410);
+  padding:12px 8px;
   display:flex;align-items:center;justify-content:center;
-  border:1px solid #c8882a;flex-shrink:0;width:36px}
-.gen-members{display:flex;flex-wrap:wrap;flex:1;
-  border:1px solid #c4a070;border-left:none;background:white}
-.member-cell{width:110px;border-right:1px solid #ede0c8;border-bottom:1px solid #ede0c8;
-  padding:10px 6px;display:flex;flex-direction:column;align-items:center;min-height:160px}
-.member-cell.deceased{background:#f8f5f0}
-.member-cell.mine{border-top:2px solid #c8882a}
-.mc-cross{font-size:9px;color:#888;margin-bottom:2px}
-.mc-photo{width:44px;height:44px;object-fit:cover;border-radius:50%;
-  border:1px solid #d4b896;margin-bottom:6px}
-.mc-name{writing-mode:vertical-rl;text-orientation:upright;
-  font-size:15px;font-weight:700;letter-spacing:4px;color:#1a1209;
-  margin:4px auto;line-height:1.4}
-.mc-name.dead{color:#666}
-.mc-style{font-size:10px;color:#6b5540;text-align:center;margin-bottom:4px}
-.mc-info{font-size:10px;color:#6b5540;line-height:1.9;text-align:center;width:100%}
-.mc-info span{display:block}
-.mc-lifespan{font-size:9px;color:#888;text-align:center;margin-top:4px;
-  padding-top:4px;border-top:1px dashed #ede0c8}
-.mc-spouse{font-size:10px;color:#c43a3a;text-align:center;margin-top:3px}
-.photo-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:18px;margin-top:20px}
+  border-right:1px solid #c8882a;flex-shrink:0;width:34px;
+  min-height:60px;
+}
+.gen-label-empty{
+  width:34px;flex-shrink:0;
+  border-right:1px solid rgba(200,136,42,.3);
+  background:rgba(44,26,8,.04);
+}
+
+/* Member name — vertical */
+.name-cell{
+  writing-mode:vertical-rl;text-orientation:upright;
+  font-size:16px;font-weight:700;letter-spacing:5px;color:#1a1209;
+  padding:12px 10px;
+  display:flex;align-items:center;justify-content:center;
+  border-right:1px solid #d4b896;flex-shrink:0;
+  background:white;min-width:38px;
+}
+.name-cell.deceased{color:#555;background:#f5f2ee}
+.name-cell.mine{border-top:2px solid #c8882a}
+.cross-mark{font-size:10px;color:#888;writing-mode:horizontal-tb;
+  display:block;text-align:center;margin-bottom:4px;letter-spacing:0}
+
+/* Content — all vertical */
+.content-cell{
+  writing-mode:vertical-rl;text-orientation:mixed;
+  font-size:12px;color:#3d2e1a;line-height:1.9;letter-spacing:1px;
+  padding:12px 10px;flex:1;
+  background:white;
+  word-break:break-all;
+}
+.content-cell.deceased{color:#555;background:#f5f2ee}
+
+/* Photo cell */
+.photo-cell{
+  display:flex;align-items:center;justify-content:center;
+  padding:8px;border-left:1px solid #ede0c8;flex-shrink:0;
+  background:white;width:60px;
+}
+.photo-cell.deceased{background:#f5f2ee}
+.photo-cell img{width:44px;height:44px;object-fit:cover;
+  border-radius:50%;border:1px solid #d4b896}
+
+/* ── PHOTOS PAGE ── */
+.photo-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:20px;margin-top:20px}
 .photo-item{text-align:center}
 .photo-item img{width:100%;aspect-ratio:1;object-fit:cover;border:1px solid #d4b896;display:block}
 .photo-name{font-size:11px;margin-top:4px;font-weight:700;color:#3d2e1a;letter-spacing:1px}
 .photo-info{font-size:9px;color:#6b5540;margin-top:2px}
+
+/* ── FOOTER ── */
 .page-footer{text-align:center;font-size:10px;color:#6b5540;
-  margin-top:50px;padding-top:14px;border-top:1px solid #ede0c8;letter-spacing:2px}
+  margin-top:40px;padding-top:12px;border-top:1px solid #ede0c8;letter-spacing:2px}
 `;
 
+  // ── COVER ────────────────────────────────────────────
   let html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
 <title>${clanName}</title><style>${css}</style></head><body>
 <div class="cover">
@@ -1472,6 +1597,7 @@ body{font-family:'Noto Serif SC',serif;background:#fdf8f0;color:#1a1209}
   </div>
 </div>`;
 
+  // ── PREFACE ──────────────────────────────────────────
   if (inclPreface && pref.text) {
     html += `<div class="section page-break">
   <div class="section-title">谱　　序</div>
@@ -1483,6 +1609,7 @@ body{font-family:'Noto Serif SC',serif;background:#fdf8f0;color:#1a1209}
 </div>`;
   }
 
+  // ── WORLD GENEALOGY — all vertical ───────────────────
   if (inclList) {
     html += `<div class="section page-break">
   <div class="section-title">世　系　名　录</div>
@@ -1490,39 +1617,34 @@ body{font-family:'Noto Serif SC',serif;background:#fdf8f0;color:#1a1209}
   <div class="section-rule"><span>◆</span></div>`;
 
     Object.entries(byGen).forEach(([gen, mlist]) => {
-      html += `<div class="gen-section no-break"><div class="gen-header">
-      <div class="gen-label">${gen}</div>
-      <div class="gen-members">`;
-      mlist.forEach(m => {
+      html += `<div class="gen-block no-break">`;
+
+      mlist.forEach((m, idx) => {
         const isDead = !!m.death;
-        const lifespan = (m.birth && m.death)
-          ? (()=>{const b=parseInt(m.birth),d=parseInt(m.death);return(!isNaN(b)&&!isNaN(d))?`享年${d-b}岁`:''})()
-          : '';
-        const mine = isMine(m);
-        const ph = photos.find(p => p.to === m.name);
-        html += `<div class="member-cell ${isDead?'deceased':''} ${mine?'mine':''}">
-          ${isDead?'<div class="mc-cross">✝</div>':''}
-          ${ph?`<img src="${ph.url}" class="mc-photo">`:''}
-          <div class="mc-name ${isDead?'dead':''}">${m.name}</div>
-          ${m.style?`<div class="mc-style">字：${m.style}</div>`:''}
-          <div class="mc-info">
-            ${m.birth?`<span>生：${m.birthDate||m.birth}</span>`:''}
-            ${m.death?`<span>卒：${m.deathDate||m.death}</span>`:''}
-            ${m.father?`<span>父：${m.father}</span>`:''}
-            ${m.hometown?`<span>籍：${m.hometown.split(' ').slice(0,2).join('')}</span>`:''}
-            ${m.location&&!isDead?`<span>居：${m.location.split(' ').slice(0,2).join('')}</span>`:''}
-            ${m.job?`<span>业：${m.job}</span>`:''}
+        const mine   = isMine(m);
+        const ph     = photos.find(p => p.to === m.name);
+        const content = memberContent(m);
+        const isFirst = idx === 0;
+
+        html += `<div class="gen-row">
+          ${isFirst
+            ? `<div class="gen-label-cell">${gen}</div>`
+            : `<div class="gen-label-empty"></div>`}
+          <div class="name-cell ${isDead?'deceased':''} ${mine?'mine':''}">
+            ${isDead?`<span class="cross-mark">✝</span>`:''}${m.name}
           </div>
-          ${lifespan?`<div class="mc-lifespan">${lifespan}</div>`:''}
-          ${m.spouse?`<div class="mc-spouse">♥ ${m.spouse}</div>`:''}
+          <div class="content-cell ${isDead?'deceased':''}">${content}</div>
+          ${ph?`<div class="photo-cell ${isDead?'deceased':''}"><img src="${ph.url}" alt="${m.name}"></div>`:''}
         </div>`;
       });
-      html += `</div></div></div>`;
+
+      html += `</div>`;
     });
 
     html += `<div class="page-footer">${clanName} · ${edition}</div></div>`;
   }
 
+  // ── PHOTOS ───────────────────────────────────────────
   if (inclPhotos && photos.length) {
     const ap = getSortedPhotos().filter(p => p.to);
     if (ap.length) {
