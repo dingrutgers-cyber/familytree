@@ -1387,76 +1387,87 @@ function doGenPDF() {
 
   function yearCN(y) {
     if (!y) return '';
-    const m = String(y).match(/\d{4}/);
-    if (!m) return y;
-    return m[0].split('').map(d=>'〇一二三四五六七八九'[d]).join('')+'年';
+    const s = String(y).match(/\d{4}/);
+    return s ? s[0].split('').map(d=>'〇一二三四五六七八九'[d]).join('')+'年' : y;
   }
   function numCN(n) {
-    const int = parseInt(n);
-    if (isNaN(int)||int<=0) return '';
-    const d=['〇','一','二','三','四','五','六','七','八','九'];
-    const u=['','十','百'];
+    const int=parseInt(n); if(isNaN(int)||int<=0) return '';
+    const d=['〇','一','二','三','四','五','六','七','八','九'],u=['','十','百','千'];
     const s=String(int); let r='';
     for(let i=0;i<s.length;i++){
-      const dig=parseInt(s[i]),unit=u[s.length-1-i];
-      if(dig===0){if(r&&r.slice(-1)!=='〇')r+='〇';}
-      else r+=d[dig]+unit;
+      const dg=parseInt(s[i]),un=u[s.length-1-i];
+      if(dg===0){if(r&&r.slice(-1)!=='〇')r+='〇';}else r+=d[dg]+un;
     }
-    return r.replace(/^一十/,'十');
+    return r.replace(/^一十/,'十').replace(/〇$/,'');
   }
-
-  // Convert all 4-digit years in a text string to Chinese
-  function convertYears(text) {
-    if (!text) return '';
-    // Convert all sequences of Arabic digits to Chinese characters
-    // This handles years (4 digits), ages, months, days, etc.
+  function convertNums(text) {
+    if(!text) return '';
     return text.replace(/\d+/g, n => {
-      const digits = '〇一二三四五六七八九';
-      // For 4-digit years: digit by digit (1980 → 一九八〇)
-      if (n.length === 4 && parseInt(n) >= 1000) {
-        return n.split('').map(d => digits[d]).join('');
+      const int=parseInt(n);
+      if(n.length===4&&int>=1000) return n.split('').map(d=>'〇一二三四五六七八九'[d]).join('');
+      if(isNaN(int)||int===0) return '〇';
+      const d=['〇','一','二','三','四','五','六','七','八','九'],u=['','十','百','千'];
+      const s=String(int); let r='';
+      for(let i=0;i<s.length;i++){
+        const dg=parseInt(s[i]),un=u[s.length-1-i];
+        if(dg===0){if(r&&r.slice(-1)!=='〇')r+='〇';}else r+=d[dg]+un;
       }
-      // For other numbers up to 999: use positional Chinese
-      const int = parseInt(n);
-      if (isNaN(int) || int === 0) return '〇';
-      const u = ['','十','百','千'];
-      const s = String(int); let r = '';
-      for (let i = 0; i < s.length; i++) {
-        const d = parseInt(s[i]), unit = u[s.length - 1 - i];
-        if (d === 0) { if (r && r.slice(-1) !== '〇') r += '〇'; }
-        else r += digits[d] + unit;
-      }
-      return r.replace(/^一十/, '十').replace(/〇$/, '');
+      return r.replace(/^一十/,'十').replace(/〇$/,'');
     });
   }
 
-  // Build content lines for one member (everything except name)
-  function memberContent(m) {
-    const isDead = !!m.death;
-    const lifespan = (m.birth&&m.death)
-      ? (()=>{const b=parseInt(m.birth),d=parseInt(m.death);
-              return(!isNaN(b)&&!isNaN(d))?'享年'+numCN(d-b)+'岁':''})()
-      : '';
-    const parts=[];
-    if(m.style)      parts.push('字'+m.style);
-    if(m.birthDate)  parts.push('生于'+m.birthDate);
-    else if(m.birth) parts.push('生于'+yearCN(m.birth));
+  // Build info string for a member
+  function memberInfo(m) {
+    const isDead=!!m.death;
+    const ls=(m.birth&&m.death)?(()=>{const b=parseInt(m.birth),d=parseInt(m.death);return(!isNaN(b)&&!isNaN(d))?'享年'+numCN(d-b)+'岁':''})():'';
+    const p=[];
+    if(m.style)      p.push('字'+m.style);
+    if(m.birthDate)  p.push('生于'+m.birthDate);
+    else if(m.birth) p.push('生于'+yearCN(m.birth));
     if(m.death){
-      if(m.deathDate) parts.push('卒于'+m.deathDate);
-      else             parts.push('卒于'+yearCN(m.death));
-      if(lifespan)     parts.push(lifespan);
+      if(m.deathDate) p.push('卒于'+m.deathDate);
+      else             p.push('卒于'+yearCN(m.death));
+      if(ls) p.push(ls);
     }
-    if(m.father)  parts.push('父'+m.father);
-    if(m.mother)  parts.push('母'+m.mother);
-    if(m.spouse)  parts.push('配'+m.spouse);
-    if(m.hometown)parts.push('籍'+m.hometown.replace(/\s+/g,'').replace(/省|自治区/,'').substring(0,6));
-    if(m.location&&!isDead)parts.push('居'+m.location.replace(/\s+/g,'').replace(/省|自治区/,'').substring(0,6));
-    if(m.job)     parts.push('业'+m.job.substring(0,8));
-    if(m.clan)    parts.push(m.clan);
-    if(m.notes)   parts.push(convertYears(m.notes));
-    return parts.join('　');
+    if(m.father)  p.push('父'+m.father);
+    if(m.mother)  p.push('母'+m.mother);
+    if(m.spouse)  p.push('配'+m.spouse);
+    if(m.hometown)p.push('籍'+m.hometown.replace(/\s+/g,'').replace(/省|自治区/,'').substring(0,8));
+    if(m.location&&!isDead)p.push('居'+m.location.replace(/\s+/g,'').replace(/省|自治区/,'').substring(0,8));
+    if(m.job)     p.push('业'+m.job.substring(0,10));
+    if(m.clan)    p.push(m.clan);
+    if(m.notes)   p.push(convertNums(m.notes));
+    return p.join('　');
   }
 
+  // ── SVG-based vertical text rendering ────────────────────
+  // Letter page: 8.5" × 11" = 816 × 1056px at 96dpi
+  // With 0.55" margins: content = 7.4" × 9.9" = 710 × 950px
+  const PAGE_W = 710, PAGE_H = 950;
+  const FONT = '12pt "Noto Serif SC",serif';
+  const FONT_SIZE = 16;  // px, ~12pt
+  const LINE_H = FONT_SIZE * 1.9;
+  const COL_NAME_W = 28;   // name column width
+  const COL_GEN_W  = 24;   // generation label width
+  const CELL_PAD   = 6;
+
+  // Estimate text height when rendered vertically in given column width
+  // For vertical text: each char is ~FONT_SIZE wide, stacked vertically
+  // The "height" of a vertical column = number of chars × LINE_H... 
+  // but we're putting text in a column of fixed width COL_NAME_W
+  // Actually for our table: content column fills remaining width,
+  // and text wraps. Let's compute chars per column.
+  // Content col width = PAGE_W - COL_GEN_W - COL_NAME_W - CELL_PAD*4
+  const COL_CONTENT_W = PAGE_W - COL_GEN_W - COL_NAME_W - CELL_PAD * 4;
+
+  // For vertical text in a column of width W:
+  // Each "line" (vertical strip) = FONT_SIZE wide
+  // chars per strip = floor(available_height / FONT_SIZE)
+  // But we don't know height upfront — use fixed chars per strip approach
+  const CHARS_PER_STRIP = Math.floor((PAGE_H * 0.12) / FONT_SIZE); // ~12% page height per strip
+  const STRIPS_AVAIL = Math.floor(COL_CONTENT_W / (FONT_SIZE + 2));
+
+  // ── CSS ──────────────────────────────────────────────────
   const css = `
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1467,8 +1478,6 @@ html,body{font-family:'Noto Serif SC',serif;font-size:12pt;background:#fff;color
   .pb{page-break-before:always}
   .nob{page-break-inside:avoid}
 }
-
-/* COVER */
 .cover{width:100%;height:10in;background:linear-gradient(160deg,#1a0e05,#2c1a08 50%,#3d2410);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   text-align:center;padding:1in 0.8in;position:relative}
@@ -1486,8 +1495,6 @@ html,body{font-family:'Noto Serif SC',serif;font-size:12pt;background:#fff;color
 .cover-stats{display:flex;gap:32pt;justify-content:center;margin-top:28pt;position:relative;z-index:1}
 .cs-num{font-size:22pt;color:#e6b060;font-weight:700}
 .cs-lbl{font-size:7.5pt;color:rgba(200,136,42,.6);letter-spacing:2pt;margin-top:2pt}
-
-/* SECTION */
 .sec-head{text-align:center;margin-bottom:14pt}
 .sec-title{font-size:15pt;letter-spacing:7pt;color:#2c1a08;font-weight:700;margin-bottom:3pt}
 .sec-sub{font-size:8.5pt;color:#6b5540;letter-spacing:2.5pt;margin-bottom:10pt}
@@ -1500,65 +1507,10 @@ html,body{font-family:'Noto Serif SC',serif;font-size:12pt;background:#fff;color
   padding:7pt 12pt;border-top:0.5pt solid #ede0c8;border-bottom:0.5pt solid #ede0c8;letter-spacing:1pt}
 .ftr{text-align:center;font-size:7.5pt;color:#6b5540;
   margin-top:20pt;padding-top:7pt;border-top:0.4pt solid #ede0c8;letter-spacing:2pt}
-
-/* GENEALOGY — one row per generation, members side by side */
-.gen-wrap{margin-bottom:8pt}
-
-/* The generation table: 1 row, cols = [gen-label | member1 | member2 | ...] */
-table.gtbl{
-  width:100%;border-collapse:collapse;
-  border:1pt solid #c8882a;
-  font-size:12pt;
-}
-/* Generation label: vertical, spans full height */
-.gl{
-  writing-mode:vertical-rl;text-orientation:upright;
-  font-size:11pt;font-weight:700;color:#f5d99a;letter-spacing:5pt;
-  background:linear-gradient(180deg,#2c1a08,#3d2410);
-  text-align:center;vertical-align:middle;
-  border-right:1.5pt solid #c8882a;
-  padding:8pt 5pt;width:22pt;
-}
-/* Each member: a cell with name on top + content below, all vertical */
-.mc{
-  vertical-align:top;
-  border-right:1pt solid #d4b896;
-  padding:0;
-  background:#fff;
-}
-.mc:last-child{border-right:none}
-.mc.dead{background:#f7f5f2}
-.mc.mine{border-top:2pt solid #c8882a}
-/* Name row within cell */
-.mc-n{
-  writing-mode:vertical-rl;text-orientation:upright;
-  font-size:14pt;font-weight:700;letter-spacing:5pt;
-  padding:6pt 5pt 4pt;
-  border-bottom:0.5pt solid #d4b896;
-  text-align:center;
-  display:block;width:100%;
-  color:#1a1209;
-}
-.mc-n.dead{color:#555}
-.crs{font-size:8pt;color:#888;writing-mode:horizontal-tb;
-  display:block;text-align:center;margin-bottom:2pt;letter-spacing:0}
-/* Photo (optional, small, inside name area) */
-.mc-ph{
-  display:block;width:30pt;height:30pt;object-fit:cover;
-  border-radius:50%;border:0.4pt solid #d4b896;
-  margin:0 auto 3pt;
-}
-/* Content below name */
-.mc-c{
-  writing-mode:vertical-rl;text-orientation:upright;
-  font-size:12pt;line-height:1.85;letter-spacing:0.5pt;
-  padding:6pt 5pt;
-  color:#3d2e1a;word-break:break-all;
-  display:block;width:100%;text-align:left;
-}
-.mc-c.dead{color:#555}
-
-/* PHOTOS */
+/* Genealogy table — horizontal layout, all content via SVG */
+.gen-tbl{width:100%;border-collapse:collapse;border:1pt solid #c8882a;margin-bottom:8pt;table-layout:fixed}
+.gen-tbl td{border:0.5pt solid #d4b896;padding:0;overflow:hidden;vertical-align:top}
+td.gl{width:22pt;background:linear-gradient(180deg,#2c1a08,#3d2410);border-right:1.5pt solid #c8882a}
 .pg{display:grid;grid-template-columns:repeat(5,1fr);gap:12pt;margin-top:12pt}
 .pi{text-align:center}
 .pi img{width:100%;aspect-ratio:1;object-fit:cover;border:0.5pt solid #d4b896;display:block}
@@ -1566,7 +1518,65 @@ table.gtbl{
 .pi-info{font-size:7.5pt;color:#6b5540;margin-top:1.5pt}
 `;
 
-  // COVER
+  // ── SVG helper: render vertical text in a rect ───────────
+  // Returns {svg: string, height: number}
+  function svgVertCell(text, opts={}) {
+    const {
+      w = COL_NAME_W,
+      fontSize = FONT_SIZE,
+      fontWeight = '400',
+      color = '#1a1209',
+      bg = 'white',
+      padX = CELL_PAD,
+      padY = CELL_PAD,
+      center = false,
+      cross = false,  // show ✝ above
+    } = opts;
+
+    const innerW = w - padX * 2;
+    // Each character column is fontSize wide
+    // chars that fit per column = floor(available / fontSize) approx
+    // We'll just stack chars and let them flow
+    const chars = Array.from(text);
+    // Calculate how many chars fit in one vertical strip of innerW
+    // Each strip = fontSize + 1 gap
+    const stripW = fontSize + 2;
+    const strips = Math.max(1, Math.floor(innerW / stripW));
+    // Distribute chars into strips (right to left, traditional)
+    const charsPerStrip = Math.ceil(chars.length / strips);
+    const stripArrays = [];
+    for (let i = 0; i < strips; i++) {
+      const slice = chars.slice(i * charsPerStrip, (i + 1) * charsPerStrip);
+      if (slice.length) stripArrays.push(slice);
+    }
+    const actualStrips = stripArrays.length;
+    const cellH = charsPerStrip * fontSize + padY * 2 + (cross ? fontSize + 4 : 0);
+    const cellW = actualStrips * stripW + padX * 2;
+    const finalW = Math.max(w, cellW);
+
+    let svgContent = `<rect width="${finalW}" height="${cellH}" fill="${bg}"/>`;
+    if (cross) {
+      svgContent += `<text x="${finalW/2}" y="${padY + fontSize - 2}" text-anchor="middle"
+        font-family="Noto Serif SC,serif" font-size="${fontSize*0.7}" fill="#888">✝</text>`;
+    }
+    // Draw strips right-to-left (traditional Chinese reading order)
+    for (let s = 0; s < actualStrips; s++) {
+      const stripChars = stripArrays[s];
+      const sx = finalW - padX - (s + 1) * stripW + 2;
+      stripChars.forEach((ch, ci) => {
+        const cy = padY + (cross ? fontSize + 4 : 0) + ci * fontSize + fontSize - 2;
+        svgContent += `<text x="${sx + stripW/2}" y="${cy}" text-anchor="middle"
+          font-family="Noto Serif SC,serif" font-size="${fontSize}" font-weight="${fontWeight}"
+          fill="${color}">${ch.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</text>`;
+      });
+    }
+    return {
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${finalW}" height="${cellH}">${svgContent}</svg>`,
+      w: finalW, h: cellH
+    };
+  }
+
+  // ── COVER ────────────────────────────────────────────────
   let html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
 <title>${clanName}</title><style>${css}</style></head><body>
 <div class="cover">
@@ -1582,13 +1592,11 @@ table.gtbl{
   </div>
 </div>`;
 
-  // PREFACE
+  // ── PREFACE ──────────────────────────────────────────────
   if (inclPreface && pref.text) {
     html += `<div class="pb" style="padding:0.1in 0">
-  <div class="sec-head">
-    <div class="sec-title">谱　　序</div>
-    ${pref.name?`<div class="sec-sub">${pref.name}</div>`:''}
-  </div>
+  <div class="sec-head"><div class="sec-title">谱　　序</div>
+  ${pref.name?`<div class="sec-sub">${pref.name}</div>`:''}</div>
   <div class="sec-rule"><span>◆</span></div>
   ${pref.anc?`<div class="pref-anc">始迁祖：${pref.anc}</div>`:''}
   <div class="preface">${pref.text}</div>
@@ -1596,7 +1604,7 @@ table.gtbl{
 </div>`;
   }
 
-  // GENEALOGY
+  // ── GENEALOGY ─────────────────────────────────────────────
   if (inclList) {
     html += `<div class="pb" style="padding:0.1in 0">
   <div class="sec-head">
@@ -1606,31 +1614,56 @@ table.gtbl{
   <div class="sec-rule"><span>◆</span></div>`;
 
     Object.entries(byGen).forEach(([gen, mlist]) => {
-      // One table per generation, one row, members are columns
-      html += `<div class="gen-wrap nob"><table class="gtbl"><tr>`;
-      html += `<td class="gl">${gen}</td>`;
+      // Render gen label SVG
+      const genSvg = svgVertCell(gen, {
+        w: COL_GEN_W, fontSize: 13, fontWeight:'700',
+        color:'#f5d99a', bg:'transparent', padX:4, padY:8, center:true
+      });
 
+      // Render each member: name cell + content cell side by side in one <td>
+      // All members in same generation share one table row
+      let memberCells = '';
       mlist.forEach(m => {
         const isDead = !!m.death;
         const mine   = isMine(m);
-        const ct     = memberContent(m);
+        const info   = memberInfo(m);
+        const bgColor = isDead ? '#f7f5f2' : 'white';
+        const nameColor = isDead ? '#555' : '#1a1209';
 
-        html += `<td class="mc${isDead?' dead':''}${mine?' mine':''}">
-          <span class="mc-n${isDead?' dead':''}">
-            ${isDead?'<span class="crs">✝</span>':''}
-            ${m.name}
-          </span>
-          <span class="mc-c${isDead?' dead':''}">${ct}</span>
+        // Name SVG
+        const nameSvg = svgVertCell(m.name, {
+          w: COL_NAME_W, fontSize: 15, fontWeight:'700',
+          color: nameColor, bg: bgColor,
+          padX: 4, padY: 6, cross: isDead
+        });
+
+        // Info SVG — use remaining width
+        const infoW = Math.floor((PAGE_W - COL_GEN_W - mlist.length * (COL_NAME_W + 2)) / mlist.length) - 8;
+        const infoSvg = svgVertCell(info, {
+          w: Math.max(infoW, 60), fontSize: FONT_SIZE,
+          color: isDead ? '#555' : '#3d2e1a', bg: bgColor,
+          padX: CELL_PAD, padY: CELL_PAD
+        });
+
+        const borderL = mine ? 'border-left:1.5pt solid #c8882a;' : '';
+        memberCells += `<td style="padding:0;${borderL}background:${bgColor}">
+          <div style="display:flex;align-items:stretch">
+            <div style="border-right:0.5pt solid #d4b896;flex-shrink:0">${nameSvg.svg}</div>
+            <div>${infoSvg.svg}</div>
+          </div>
         </td>`;
       });
 
-      html += `</tr></table></div>`;
+      html += `<table class="gen-tbl nob"><tr>
+        <td class="gl">${genSvg.svg}</td>
+        ${memberCells}
+      </tr></table>`;
     });
 
     html += `<div class="ftr">${clanName} · ${edition}</div></div>`;
   }
 
-  // PHOTOS
+  // ── PHOTOS ────────────────────────────────────────────────
   if (inclPhotos && photos.length) {
     const ap = getSortedPhotos().filter(p => p.to);
     if (ap.length) {
@@ -1655,9 +1688,9 @@ table.gtbl{
   }
 
   html += '</body></html>';
-  const w = window.open('', '_blank', 'width=900,height=800');
+  const w = window.open('', '_blank', 'width=950,height=850');
   w.document.write(html); w.document.close();
-  w.onload = () => setTimeout(() => w.print(), 1000);
+  w.onload = () => setTimeout(() => w.print(), 1200);
   document.getElementById('pdf-msg').textContent = '✓ 打印窗口已打开，请选择「存储为PDF」';
   toast('✓ PDF已生成');
 }
