@@ -1297,12 +1297,35 @@ function doSortPhotos(mode) {
   renderPhotos();
 }
 
+// 解析辈分字段为可排序数字，支持多种格式：
+// "第五世" / "第5世" / "五世" / "5" / "仁字辈"（按首次出现顺序）
+function parseGenOrder(genStr) {
+  if (!genStr) return 9999;
+  // 先尝试直接提取数字：第5世、5世、第5、5
+  const arabic = genStr.match(/\d+/);
+  if (arabic) return parseInt(arabic[0]);
+  // 汉字数字转换：一二三四五六七八九十百
+  const cnMap = {'〇':0,'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,
+                 '十一':11,'十二':12,'十三':13,'十四':14,'十五':15,'十六':16,'十七':17,'十八':18,'十九':19,'二十':20,
+                 '二十一':21,'二十二':22,'二十三':23,'二十四':24,'二十五':25};
+  for (const [k,v] of Object.entries(cnMap).sort((a,b)=>b[0].length-a[0].length)) {
+    if (genStr.includes(k)) return v;
+  }
+  // 非数字辈分（如"仁字辈"）：按该辈分在族员中首次出现的顺序排
+  const allGens = members.map(m=>m.gen).filter(Boolean);
+  const idx = allGens.indexOf(genStr);
+  return idx >= 0 ? 500 + idx : 9999;
+}
+
 function getSortedPhotos() {
   const arr = [...photos];
   if (photoSort === 'gen') arr.sort((a, b) => {
     const ma = allMembers().find(m => m.name === a.to);
     const mb = allMembers().find(m => m.name === b.to);
-    return (parseInt(ma?.gen) || 99) - (parseInt(mb?.gen) || 99);
+    const ga = parseGenOrder(ma?.gen), gb = parseGenOrder(mb?.gen);
+    if (ga !== gb) return ga - gb;
+    // 同辈再按出生年排
+    return (parseInt(ma?.birth) || 9999) - (parseInt(mb?.birth) || 9999);
   });
   else if (photoSort === 'birth') arr.sort((a, b) => {
     const ma = allMembers().find(m => m.name === a.to);
@@ -1647,12 +1670,11 @@ table.gt td{
 
   // Photos — 最后一页，按辈分排序
   if(inclPhotos&&photos.length){
-    // 按辈分排序：先按gen数字，再按birth年
+    // 按辈分排序（用 parseGenOrder 支持汉字辈分），同辈再按出生年
     const ap=[...photos].filter(p=>p.to).sort((a,b)=>{
       const ma=allMembers().find(m=>m.name===a.to);
       const mb=allMembers().find(m=>m.name===b.to);
-      const ga=parseInt(ma?.gen)||99;
-      const gb=parseInt(mb?.gen)||99;
+      const ga=parseGenOrder(ma?.gen), gb=parseGenOrder(mb?.gen);
       if(ga!==gb)return ga-gb;
       return (parseInt(ma?.birth)||9999)-(parseInt(mb?.birth)||9999);
     });
