@@ -403,6 +403,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
           <div class="form-group"><label>祖籍</label><input id="f-hometown" placeholder="例：湖南省 长沙县"></div>
           <div class="form-group"><label>现居地</label><input id="f-location" placeholder="例：广东省 深圳市"></div>
           <div class="form-group"><label>父亲姓名</label><input id="f-father" placeholder="建立父子关联"></div>
+          <div class="form-group"><label>母亲姓名</label><input id="f-mother" placeholder="母亲姓名"></div>
           <div class="form-group"><label>配偶姓名</label><input id="f-spouse" placeholder="配偶姓名"></div>
           <div class="form-group"><label>辈分</label><input id="f-gen" placeholder="例：第五世 / 仁字辈"></div>
           <div class="form-group"><label>堂号</label><input id="f-clan" placeholder="例：清河堂"></div>
@@ -785,7 +786,7 @@ async function doSaveMember() {
     name, style: vv('f-style'), gender, birth: vv('f-birth'),
     birth_date: vv('f-birth-date'), death: vv('f-death'), death_date: vv('f-death-date'),
     hometown: vv('f-hometown'), location: vv('f-location'),
-    father_name: vv('f-father'), spouse: vv('f-spouse'),
+    father_name: vv('f-father'), mother_name: vv('f-mother'), spouse: vv('f-spouse'),
     generation: vv('f-gen'), clan: vv('f-clan'),
     occupation: vv('f-job'), notes: vv('f-notes')
   };
@@ -819,7 +820,7 @@ function mapRow(r) {
   return { id: r.id, by: r.created_by, byEmail: r.created_by_email,
            name: r.name, style: r.style, gender: r.gender, birth: r.birth,
            birthDate: r.birth_date, death: r.death, deathDate: r.death_date,
-           hometown: r.hometown, location: r.location, father: r.father_name,
+           hometown: r.hometown, location: r.location, father: r.father_name, mother: r.mother_name,
            spouse: r.spouse, gen: r.generation, clan: r.clan,
            job: r.occupation, notes: r.notes };
 }
@@ -847,7 +848,7 @@ function doEditMember(id) {
   s('f-name', m.name); s('f-style', m.style); s('f-birth', m.birth);
   s('f-birth-date', m.birthDate); s('f-death', m.death); s('f-death-date', m.deathDate);
   s('f-hometown', m.hometown); s('f-location', m.location);
-  s('f-father', m.father); s('f-spouse', m.spouse);
+  s('f-father', m.father); s('f-mother', m.mother); s('f-spouse', m.spouse);
   s('f-gen', m.gen); s('f-clan', m.clan);
   s('f-job', m.job); s('f-notes', m.notes);
   document.getElementById('f-gender').value = m.gender || '';
@@ -859,7 +860,7 @@ function doEditMember(id) {
 
 function doClearForm() {
   ['f-name','f-style','f-birth','f-birth-date','f-death','f-death-date','f-hometown','f-location',
-   'f-father','f-spouse','f-gen','f-clan','f-job','f-notes'].forEach(id => {
+   'f-father','f-mother','f-spouse','f-gen','f-clan','f-job','f-notes'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('f-gender').value = '';
@@ -956,6 +957,7 @@ function memberCard(m) {
       ${m.birth||m.death ? `<div>${m.birth||'？'}${m.death ? ' — '+m.death : ''} ${lifespan}</div>` : ''}
       ${m.hometown ? `<div>籍贯：${m.hometown.split(' ').slice(0,2).join(' ')}</div>` : ''}
       ${m.father ? `<div>父：${m.father}</div>` : ''}
+      ${m.mother ? `<div>母：${m.mother}</div>` : ''}
     </div>
     ${m.gen ? `<span class="member-tag">${m.gen}</span>` : ''}
     ${isDead ? `<span class="member-tag" style="background:rgba(80,80,80,.08);color:#555;border-color:rgba(80,80,80,.2)">已故</span>` : ''}
@@ -994,7 +996,7 @@ function doSearch() {
   if (!el) return;
   const all = [...members, ...getVirtualSpouses()];
   const list = q ? all.filter(m =>
-    [m.name, m.style, m.hometown, m.location, m.gen, m.clan, m.job, m.father, m.spouseOf]
+    [m.name, m.style, m.hometown, m.location, m.gen, m.clan, m.job, m.father, m.mother, m.spouseOf]
       .some(v => v && v.toLowerCase().includes(q))
   ) : all;
   el.innerHTML = list.length ? list.map(m => memberCard(m)).join('')
@@ -1445,6 +1447,7 @@ function doGenPDF() {
       if(lifespan)     parts.push(lifespan);
     }
     if(m.father)  parts.push('父'+m.father);
+    if(m.mother)  parts.push('母'+m.mother);
     if(m.spouse)  parts.push('配'+m.spouse);
     if(m.hometown)parts.push('籍'+m.hometown.replace(/\s+/g,'').replace(/省|自治区/,'').substring(0,6));
     if(m.location&&!isDead)parts.push('居'+m.location.replace(/\s+/g,'').replace(/省|自治区/,'').substring(0,6));
@@ -1676,6 +1679,7 @@ function openModal(id) {
     ['祖籍', m.hometown],
     ['现居地', m.location],
     ['父亲', m.father],
+    ['母亲', m.mother],
     ['配偶', m.spouse],
     ['辈分', m.gen],
     ['堂号', m.clan],
