@@ -1371,14 +1371,11 @@ function doGenPDF() {
   const inclList    = document.getElementById('po-list').classList.contains('on');
   const inclPhotos  = document.getElementById('po-photos').classList.contains('on');
 
-  // Sort by generation then birth year
   const sorted = [...members].sort((a, b) => {
-    const ga = parseInt(a.gen) || 99, gb = parseInt(b.gen) || 99;
+    const ga = parseInt(a.gen)||99, gb = parseInt(b.gen)||99;
     if (ga !== gb) return ga - gb;
-    return (parseInt(a.birth) || 9999) - (parseInt(b.birth) || 9999);
+    return (parseInt(a.birth)||9999) - (parseInt(b.birth)||9999);
   });
-
-  // Group by generation
   const byGen = {};
   sorted.forEach(m => {
     const g = m.gen || '未记世代';
@@ -1386,188 +1383,162 @@ function doGenPDF() {
     byGen[g].push(m);
   });
 
-  // Convert year digits to Chinese characters: 1958 → 一九五八年
   function yearCN(y) {
     if (!y) return '';
     const m = String(y).match(/\d{4}/);
     if (!m) return y;
-    return m[0].split('').map(d => '〇一二三四五六七八九'[d]).join('') + '年';
+    return m[0].split('').map(d=>'〇一二三四五六七八九'[d]).join('')+'年';
   }
-
-  // Convert integer to Chinese: 47 → 四十七
   function numCN(n) {
     const int = parseInt(n);
-    if (isNaN(int) || int <= 0) return '';
-    const d = ['〇','一','二','三','四','五','六','七','八','九'];
-    const u = ['','十','百'];
-    const s = String(int);
-    let r = '';
-    for (let i = 0; i < s.length; i++) {
-      const dig = parseInt(s[i]), unit = u[s.length - 1 - i];
-      if (dig === 0) { if (r && r.slice(-1) !== '〇') r += '〇'; }
-      else r += d[dig] + unit;
+    if (isNaN(int)||int<=0) return '';
+    const d=['〇','一','二','三','四','五','六','七','八','九'];
+    const u=['','十','百'];
+    const s=String(int); let r='';
+    for(let i=0;i<s.length;i++){
+      const dig=parseInt(s[i]),unit=u[s.length-1-i];
+      if(dig===0){if(r&&r.slice(-1)!=='〇')r+='〇';}
+      else r+=d[dig]+unit;
     }
-    return r.replace(/^一十/, '十');
+    return r.replace(/^一十/,'十');
   }
 
-  // Build vertical content string for one member (all info except name)
-  function memberLines(m) {
+  // Build content lines for one member (everything except name)
+  function memberContent(m) {
     const isDead = !!m.death;
-    const lifespan = (m.birth && m.death)
-      ? (()=>{ const b=parseInt(m.birth), d=parseInt(m.death);
-               return (!isNaN(b)&&!isNaN(d)) ? '享年'+numCN(d-b)+'岁' : ''; })()
+    const lifespan = (m.birth&&m.death)
+      ? (()=>{const b=parseInt(m.birth),d=parseInt(m.death);
+              return(!isNaN(b)&&!isNaN(d))?'享年'+numCN(d-b)+'岁':''})()
       : '';
-    const parts = [];
-    if (m.style)     parts.push('字' + m.style);
-    if (m.birthDate) parts.push('生于' + m.birthDate);
-    else if (m.birth) parts.push('生于' + yearCN(m.birth));
-    if (m.death) {
-      if (m.deathDate) parts.push('卒于' + m.deathDate);
-      else              parts.push('卒于' + yearCN(m.death));
-      if (lifespan)     parts.push(lifespan);
+    const parts=[];
+    if(m.style)      parts.push('字'+m.style);
+    if(m.birthDate)  parts.push('生于'+m.birthDate);
+    else if(m.birth) parts.push('生于'+yearCN(m.birth));
+    if(m.death){
+      if(m.deathDate) parts.push('卒于'+m.deathDate);
+      else             parts.push('卒于'+yearCN(m.death));
+      if(lifespan)     parts.push(lifespan);
     }
-    if (m.father)   parts.push('父' + m.father);
-    if (m.spouse)   parts.push('配' + m.spouse);
-    if (m.hometown) parts.push('籍' + m.hometown.replace(/\s+/g,'').replace(/省|自治区/,'').substring(0,6));
-    if (m.location && !isDead) parts.push('居' + m.location.replace(/\s+/g,'').replace(/省|自治区/,'').substring(0,6));
-    if (m.job)      parts.push('业' + m.job.substring(0,8));
-    if (m.clan)     parts.push(m.clan);
-    if (m.notes)    parts.push(m.notes); // full biography, no truncation
+    if(m.father)  parts.push('父'+m.father);
+    if(m.spouse)  parts.push('配'+m.spouse);
+    if(m.hometown)parts.push('籍'+m.hometown.replace(/\s+/g,'').replace(/省|自治区/,'').substring(0,6));
+    if(m.location&&!isDead)parts.push('居'+m.location.replace(/\s+/g,'').replace(/省|自治区/,'').substring(0,6));
+    if(m.job)     parts.push('业'+m.job.substring(0,8));
+    if(m.clan)    parts.push(m.clan);
+    if(m.notes)   parts.push(m.notes);
     return parts.join('　');
   }
 
-  // ── CSS ── Letter size = 8.5in × 11in, 12pt base font
   const css = `
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{font-family:'Noto Serif SC',serif;font-size:12pt;
-  background:#fff;color:#1a1209}
-
-@page{size:letter portrait;margin:0.6in 0.5in}
+html,body{font-family:'Noto Serif SC',serif;font-size:12pt;background:#fff;color:#1a1209}
+@page{size:letter portrait;margin:0.55in 0.45in}
 @media print{
   html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .pb{page-break-before:always}
   .nob{page-break-inside:avoid}
 }
 
-/* ── COVER ── */
-.cover{
-  width:100%;height:10in;
-  background:linear-gradient(160deg,#1a0e05,#2c1a08 50%,#3d2410);
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  text-align:center;padding:1in 0.8in;
-  position:relative;
-}
+/* COVER */
+.cover{width:100%;height:10in;background:linear-gradient(160deg,#1a0e05,#2c1a08 50%,#3d2410);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:1in 0.8in;position:relative}
 .cover::before{content:'';position:absolute;inset:0;pointer-events:none;
-  background-image:
-    repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(200,136,42,.04) 40px,rgba(200,136,42,.04) 41px),
-    repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(200,136,42,.04) 40px,rgba(200,136,42,.04) 41px)}
-.seal{width:80pt;height:80pt;border-radius:50%;border:2pt solid #c8882a;
-  display:flex;align-items:center;justify-content:center;
-  margin:0 auto 24pt;position:relative;z-index:1}
-.seal::before{content:'';position:absolute;inset:5pt;
-  border:1pt solid rgba(200,136,42,.4);border-radius:50%}
-.seal-ch{font-size:30pt;color:#f5d99a;font-weight:700;position:relative;z-index:1}
-.cover h1{font-size:32pt;color:#f5d99a;letter-spacing:14pt;font-weight:700;
-  margin-bottom:10pt;position:relative;z-index:1}
-.cover-ed{font-size:12pt;color:rgba(200,136,42,.7);letter-spacing:6pt;
-  margin-bottom:36pt;position:relative;z-index:1}
-.cover-rule{width:60pt;height:0.5pt;background:rgba(200,136,42,.4);
-  margin:0 auto 30pt;position:relative;z-index:1}
-.cover-meta{font-size:10pt;color:rgba(245,217,154,.45);letter-spacing:4pt;
-  line-height:2.4;position:relative;z-index:1}
-.cover-stats{display:flex;gap:36pt;justify-content:center;
-  margin-top:36pt;position:relative;z-index:1}
-.cs-num{font-size:24pt;color:#e6b060;font-weight:700}
-.cs-lbl{font-size:8pt;color:rgba(200,136,42,.6);letter-spacing:3pt;margin-top:3pt}
+  background-image:repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(200,136,42,.04) 40px,rgba(200,136,42,.04) 41px),
+  repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(200,136,42,.04) 40px,rgba(200,136,42,.04) 41px)}
+.seal{width:72pt;height:72pt;border-radius:50%;border:2pt solid #c8882a;
+  display:flex;align-items:center;justify-content:center;margin:0 auto 20pt;position:relative;z-index:1}
+.seal::before{content:'';position:absolute;inset:4pt;border:1pt solid rgba(200,136,42,.4);border-radius:50%}
+.seal-ch{font-size:28pt;color:#f5d99a;font-weight:700;position:relative;z-index:1}
+.cover h1{font-size:30pt;color:#f5d99a;letter-spacing:12pt;font-weight:700;margin-bottom:8pt;position:relative;z-index:1}
+.cover-ed{font-size:11pt;color:rgba(200,136,42,.7);letter-spacing:5pt;margin-bottom:28pt;position:relative;z-index:1}
+.cover-rule{width:50pt;height:0.5pt;background:rgba(200,136,42,.4);margin:0 auto 24pt;position:relative;z-index:1}
+.cover-meta{font-size:9pt;color:rgba(245,217,154,.4);letter-spacing:4pt;line-height:2.4;position:relative;z-index:1}
+.cover-stats{display:flex;gap:32pt;justify-content:center;margin-top:28pt;position:relative;z-index:1}
+.cs-num{font-size:22pt;color:#e6b060;font-weight:700}
+.cs-lbl{font-size:7.5pt;color:rgba(200,136,42,.6);letter-spacing:2pt;margin-top:2pt}
 
-/* ── SECTION HEADER ── */
-.sec-head{text-align:center;margin-bottom:18pt}
-.sec-title{font-size:16pt;letter-spacing:8pt;color:#2c1a08;font-weight:700;margin-bottom:4pt}
-.sec-sub{font-size:9pt;color:#6b5540;letter-spacing:3pt;margin-bottom:12pt}
-.sec-rule{display:flex;align-items:center;gap:8pt;margin-bottom:18pt}
-.sec-rule::before,.sec-rule::after{content:'';flex:1;height:0.5pt;
-  background:linear-gradient(90deg,transparent,#c8882a,transparent)}
-.sec-rule span{font-size:11pt;color:#c8882a}
+/* SECTION */
+.sec-head{text-align:center;margin-bottom:14pt}
+.sec-title{font-size:15pt;letter-spacing:7pt;color:#2c1a08;font-weight:700;margin-bottom:3pt}
+.sec-sub{font-size:8.5pt;color:#6b5540;letter-spacing:2.5pt;margin-bottom:10pt}
+.sec-rule{display:flex;align-items:center;gap:7pt;margin-bottom:14pt}
+.sec-rule::before,.sec-rule::after{content:'';flex:1;height:0.4pt;background:linear-gradient(90deg,transparent,#c8882a,transparent)}
+.sec-rule span{font-size:10pt;color:#c8882a}
+.preface{font-size:12pt;line-height:2.4;color:#3d2e1a;text-align:justify;
+  text-indent:2em;white-space:pre-wrap;max-width:5.5in;margin:0 auto}
+.pref-anc{font-size:10pt;color:#6b5540;text-align:center;margin-bottom:16pt;
+  padding:7pt 12pt;border-top:0.5pt solid #ede0c8;border-bottom:0.5pt solid #ede0c8;letter-spacing:1pt}
+.ftr{text-align:center;font-size:7.5pt;color:#6b5540;
+  margin-top:20pt;padding-top:7pt;border-top:0.4pt solid #ede0c8;letter-spacing:2pt}
 
-/* ── PREFACE ── */
-.preface{font-size:12pt;line-height:2.4;color:#3d2e1a;
-  text-align:justify;text-indent:2em;white-space:pre-wrap;
-  max-width:5.5in;margin:0 auto}
-.pref-anc{font-size:10pt;color:#6b5540;text-align:center;
-  margin-bottom:18pt;padding:8pt 14pt;
-  border-top:0.5pt solid #ede0c8;border-bottom:0.5pt solid #ede0c8;letter-spacing:1pt}
+/* GENEALOGY — one row per generation, members side by side */
+.gen-wrap{margin-bottom:8pt}
 
-/* ── GENEALOGY TABLE ── */
-table.gen-tbl{
+/* The generation table: 1 row, cols = [gen-label | member1 | member2 | ...] */
+table.gtbl{
   width:100%;border-collapse:collapse;
   border:1pt solid #c8882a;
-  margin-bottom:12pt;
   font-size:12pt;
 }
-table.gen-tbl td{
-  padding:6pt 7pt;
-  border:0.5pt solid #d4b896;
-  vertical-align:top;
-}
-/* Generation label column */
-td.gen-lbl{
+/* Generation label: vertical, spans full height */
+.gl{
   writing-mode:vertical-rl;text-orientation:upright;
   font-size:11pt;font-weight:700;color:#f5d99a;letter-spacing:5pt;
   background:linear-gradient(180deg,#2c1a08,#3d2410);
   text-align:center;vertical-align:middle;
-  border-right:1pt solid #c8882a;
-  width:22pt;padding:8pt 5pt;
+  border-right:1.5pt solid #c8882a;
+  padding:8pt 5pt;width:22pt;
 }
-/* Name column */
-td.nm{
+/* Each member: a cell with name on top + content below, all vertical */
+.mc{
+  vertical-align:top;
+  border-right:1pt solid #d4b896;
+  padding:0;
+  background:#fff;
+}
+.mc:last-child{border-right:none}
+.mc.dead{background:#f7f5f2}
+.mc.mine{border-top:2pt solid #c8882a}
+/* Name row within cell */
+.mc-n{
   writing-mode:vertical-rl;text-orientation:upright;
-  font-size:14pt;font-weight:700;letter-spacing:6pt;
-  text-align:center;vertical-align:top;
-  width:26pt;padding:6pt 5pt;
-  background:#fff;
-  white-space:nowrap;
+  font-size:14pt;font-weight:700;letter-spacing:5pt;
+  padding:6pt 5pt 4pt;
+  border-bottom:0.5pt solid #d4b896;
+  text-align:center;
+  display:block;width:100%;
+  color:#1a1209;
 }
-td.nm.dead{color:#555;background:#f7f5f2}
-td.nm.mine{border-left:2pt solid #c8882a}
-/* Cross mark above name */
+.mc-n.dead{color:#555}
 .crs{font-size:8pt;color:#888;writing-mode:horizontal-tb;
-  display:block;text-align:center;margin-bottom:3pt;letter-spacing:0}
-/* Content column */
-td.ct{
+  display:block;text-align:center;margin-bottom:2pt;letter-spacing:0}
+/* Photo (optional, small, inside name area) */
+.mc-ph{
+  display:block;width:30pt;height:30pt;object-fit:cover;
+  border-radius:50%;border:0.4pt solid #d4b896;
+  margin:0 auto 3pt;
+}
+/* Content below name */
+.mc-c{
   writing-mode:vertical-rl;text-orientation:mixed;
-  font-size:12pt;line-height:1.85;letter-spacing:1pt;
-  padding:6pt 8pt;
-  background:#fff;
-  word-break:break-all;
-  text-align:left;vertical-align:top;
+  font-size:12pt;line-height:1.85;letter-spacing:0.5pt;
+  padding:6pt 5pt;
+  color:#3d2e1a;word-break:break-all;
+  display:block;width:100%;text-align:left;
 }
-td.ct.dead{color:#555;background:#f7f5f2}
-/* Photo column */
-td.ph{
-  text-align:center;vertical-align:top;
-  width:46pt;padding:5pt;
-  background:#fff;
-}
-td.ph.dead{background:#f7f5f2}
-td.ph img{width:36pt;height:36pt;object-fit:cover;
-  border-radius:50%;border:0.5pt solid #d4b896}
+.mc-c.dead{color:#555}
 
-/* ── PHOTO PAGE ── */
-.pg{display:grid;grid-template-columns:repeat(5,1fr);gap:14pt;margin-top:14pt}
+/* PHOTOS */
+.pg{display:grid;grid-template-columns:repeat(5,1fr);gap:12pt;margin-top:12pt}
 .pi{text-align:center}
 .pi img{width:100%;aspect-ratio:1;object-fit:cover;border:0.5pt solid #d4b896;display:block}
 .pi-name{font-size:9pt;margin-top:3pt;font-weight:700;color:#3d2e1a;letter-spacing:1pt}
 .pi-info{font-size:7.5pt;color:#6b5540;margin-top:1.5pt}
-
-/* ── FOOTER ── */
-.ftr{text-align:center;font-size:8pt;color:#6b5540;
-  margin-top:24pt;padding-top:8pt;
-  border-top:0.5pt solid #ede0c8;letter-spacing:2pt}
 `;
 
-  // ── COVER ────────────────────────────────────────────
+  // COVER
   let html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
 <title>${clanName}</title><style>${css}</style></head><body>
 <div class="cover">
@@ -1583,7 +1554,7 @@ td.ph img{width:36pt;height:36pt;object-fit:cover;
   </div>
 </div>`;
 
-  // ── PREFACE ──────────────────────────────────────────
+  // PREFACE
   if (inclPreface && pref.text) {
     html += `<div class="pb" style="padding:0.1in 0">
   <div class="sec-head">
@@ -1597,7 +1568,7 @@ td.ph img{width:36pt;height:36pt;object-fit:cover;
 </div>`;
   }
 
-  // ── GENEALOGY ─────────────────────────────────────────
+  // GENEALOGY
   if (inclList) {
     html += `<div class="pb" style="padding:0.1in 0">
   <div class="sec-head">
@@ -1607,32 +1578,33 @@ td.ph img{width:36pt;height:36pt;object-fit:cover;
   <div class="sec-rule"><span>◆</span></div>`;
 
     Object.entries(byGen).forEach(([gen, mlist]) => {
-      html += `<table class="gen-tbl nob">`;
-      mlist.forEach((m, idx) => {
+      // One table per generation, one row, members are columns
+      html += `<div class="gen-wrap nob"><table class="gtbl"><tr>`;
+      html += `<td class="gl">${gen}</td>`;
+
+      mlist.forEach(m => {
         const isDead = !!m.death;
         const mine   = isMine(m);
         const ph     = photos.find(p => p.to === m.name);
-        const ct     = memberLines(m);
-        html += `<tr>
-          ${idx===0
-            ? `<td class="gen-lbl" rowspan="${mlist.length}">${gen}</td>`
-            : ''}
-          <td class="nm${isDead?' dead':''}${mine?' mine':''}">
-            ${isDead?'<span class="crs">✝</span>':''}${m.name}
-          </td>
-          <td class="ct${isDead?' dead':''}">${ct}</td>
-          ${ph
-            ? `<td class="ph${isDead?' dead':''}"><img src="${ph.url}" alt="${m.name}"></td>`
-            : ''}
-        </tr>`;
+        const ct     = memberContent(m);
+
+        html += `<td class="mc${isDead?' dead':''}${mine?' mine':''}">
+          <span class="mc-n${isDead?' dead':''}">
+            ${isDead?'<span class="crs">✝</span>':''}
+            ${ph?`<img src="${ph.url}" class="mc-ph">`:''}
+            ${m.name}
+          </span>
+          <span class="mc-c${isDead?' dead':''}">${ct}</span>
+        </td>`;
       });
-      html += `</table>`;
+
+      html += `</tr></table></div>`;
     });
 
     html += `<div class="ftr">${clanName} · ${edition}</div></div>`;
   }
 
-  // ── PHOTOS ────────────────────────────────────────────
+  // PHOTOS
   if (inclPhotos && photos.length) {
     const ap = getSortedPhotos().filter(p => p.to);
     if (ap.length) {
@@ -1644,7 +1616,7 @@ td.ph img{width:36pt;height:36pt;object-fit:cover;
   <div class="sec-rule"><span>◆</span></div>
   <div class="pg">`;
       ap.forEach(p => {
-        const mbr = allMembers().find(m => m.name === p.to);
+        const mbr = allMembers().find(m => m.name===p.to);
         html += `<div class="pi">
     <img src="${p.url}" alt="${p.to}">
     <div class="pi-name">${p.to}${mbr?.death?' ✝':''}</div>
@@ -1657,10 +1629,8 @@ td.ph img{width:36pt;height:36pt;object-fit:cover;
   }
 
   html += '</body></html>';
-
   const w = window.open('', '_blank', 'width=900,height=800');
-  w.document.write(html);
-  w.document.close();
+  w.document.write(html); w.document.close();
   w.onload = () => setTimeout(() => w.print(), 1000);
   document.getElementById('pdf-msg').textContent = '✓ 打印窗口已打开，请选择「存储为PDF」';
   toast('✓ PDF已生成');
