@@ -1198,16 +1198,10 @@ function renderTree() {
       children.forEach((child, idx) => {
         const cw = layout(child, cx);
         if (idx < children.length - 1) {
-          const nextChild = children[idx + 1];
-          // 同一小家庭的兄弟（同父 OR 同母）用小间距
-          const sameFamily = (child.father && child.father === nextChild.father)
-                          || (child.mother && child.mother === nextChild.mother);
-          // 关键：左边子节点的实际右边界要加上其配偶的宽度
+          // 相邻兄弟之间一律用 FX（每个兄弟都是独立小家庭，配偶也算在内）
           const childSp = partnerOf[child.id];
           const childRight = pos[child.id].x + NW + (childSp ? SPG + NW : 0);
-          // 下一个子节点从 childRight + gap 开始
-          const gap = sameFamily ? GX : FX;
-          cx = childRight + gap;
+          cx = childRight + FX;
           sumW = cx - xStart;
         } else {
           const childSp = partnerOf[child.id];
