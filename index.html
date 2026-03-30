@@ -1,0 +1,2393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>丁氏家谱系统</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a0e05">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="丁氏家谱">
+<link rel="apple-touch-icon" href="icon-192.png">
+<!-- iOS 安全区适配（刘海屏） -->
+<style>
+  body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+#map-container { height: 520px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+.map-legend { display: flex; gap: 20px; flex-wrap: wrap; margin: 12px 0; font-size: 13px; color: var(--ink3); align-items: center; }
+.legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: middle; }
+.map-stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.map-stat { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 13px; color: var(--ink2); }
+.map-stat strong { font-size: 18px; color: var(--gold); display: block; }
+.leaflet-popup-content { font-family: var(--sans); font-size: 13px; min-width: 160px; max-width: 240px; }
+.popup-title { font-family: var(--serif); font-weight: 700; color: var(--ink2); margin-bottom: 8px; font-size: 14px; border-bottom: 1px solid var(--bg3); padding-bottom: 6px; }
+.popup-member { padding: 4px 0; border-bottom: 1px solid var(--bg3); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.popup-member:last-child { border-bottom: none; }
+.popup-member:hover { color: var(--gold); }
+.popup-badge { font-size: 10px; padding: 1px 5px; border-radius: 10px; background: var(--bg2); color: var(--ink3); }
+.popup-type { font-size: 10px; color: var(--ink3); }
+</style>
+<style>
+/* ─── Reset ─── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-height:100vh}
+
+/* ─── Screens ─── */
+.screen{display:none;min-height:100vh}
+.screen.active{display:flex}
+
+/* ─── Auth ─── */
+#auth-screen{align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#1a0e05,#3d2410);padding:20px}
+.auth-box{background:#fdf8f0;border:1px solid #c4a070;border-radius:16px;
+  padding:40px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.auth-logo{text-align:center;margin-bottom:24px}
+.auth-logo .seal{width:60px;height:60px;border-radius:50%;
+  background:linear-gradient(135deg,#1a0e05,#3d2410);
+  border:2px solid #c8882a;display:inline-flex;align-items:center;
+  justify-content:center;font-size:22px;color:#f5d99a;font-weight:700;
+  margin-bottom:12px}
+.auth-logo h1{font-size:20px;letter-spacing:4px;color:#1a1209;font-weight:700}
+.auth-logo p{font-size:11px;color:#6b5540;letter-spacing:2px;margin-top:4px}
+.auth-field{margin-bottom:14px}
+.auth-field label{display:block;font-size:11px;color:#6b5540;margin-bottom:5px;font-weight:500}
+.auth-field input{width:100%;padding:10px 12px;border:1px solid #d4b896;
+  border-radius:8px;font-size:14px;background:#f7efe0;outline:none;
+  transition:border-color .2s}
+.auth-field input:focus{border-color:#c8882a;background:white}
+.btn-main{width:100%;padding:12px;background:linear-gradient(135deg,#2c1a08,#3d2410);
+  color:#e6b060;border:1px solid #c8882a;border-radius:10px;
+  font-size:14px;font-weight:600;letter-spacing:2px;cursor:pointer;
+  transition:all .2s;margin-top:4px}
+.btn-main:hover{background:linear-gradient(135deg,#3d2410,#5a3518)}
+.auth-note{margin-top:14px;padding:10px;background:#f7efe0;border-radius:8px;
+  font-size:12px;color:#6b5540;line-height:1.7;border:1px solid #ede0c8}
+.auth-alt{text-align:center;margin-top:12px;font-size:12px;color:#6b5540}
+.auth-alt a{color:#c8882a;cursor:pointer;text-decoration:underline}
+.msg{padding:10px 12px;border-radius:8px;font-size:12px;margin-top:10px;display:none}
+.msg.error{background:rgba(155,40,40,.08);border:1px solid rgba(155,40,40,.3);color:#9b2828}
+.msg.success{background:rgba(26,96,48,.08);border:1px solid rgba(26,96,48,.3);color:#1a6030}
+.msg.show{display:block}
+
+/* ─── App ─── */
+#app-screen{flex-direction:column}
+.topbar{background:linear-gradient(135deg,#1a0e05,#3d2410);
+  position:relative;overflow:hidden}
+.topbar::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background-image:repeating-linear-gradient(0deg,transparent,transparent 28px,
+    rgba(200,136,42,.05) 28px,rgba(200,136,42,.05) 29px),
+  repeating-linear-gradient(90deg,transparent,transparent 28px,
+    rgba(200,136,42,.05) 28px,rgba(200,136,42,.05) 29px)}
+.topbar-inner{position:relative;padding:16px 24px;display:flex;align-items:center;gap:14px}
+.top-seal{width:46px;height:46px;border-radius:50%;border:2px solid #c8882a;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.top-seal span{font-size:16px;color:#c8882a;font-weight:700;letter-spacing:2px}
+.top-title h1{font-size:18px;color:#f5d99a;letter-spacing:4px;font-weight:600}
+.top-title p{font-size:10px;color:rgba(200,136,42,.7);letter-spacing:2px;margin-top:2px}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.top-stats{display:flex;gap:14px}
+.top-stat{text-align:center;border-left:1px solid rgba(200,136,42,.3);padding-left:12px}
+.top-stat-num{font-size:17px;color:#e6b060;font-weight:600}
+.top-stat-label{font-size:9px;color:rgba(245,217,154,.6);letter-spacing:1px}
+.top-user{display:flex;align-items:center;gap:8px;padding:5px 10px 5px 6px;
+  background:rgba(200,136,42,.1);border:1px solid rgba(200,136,42,.3);border-radius:20px}
+.top-user-avatar{width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(135deg,#2c1a08,#c8882a);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;color:#f5d99a;font-weight:700}
+.top-user-name{font-size:12px;color:#e6b060;max-width:100px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-logout{padding:4px 10px;border:1px solid rgba(200,136,42,.4);
+  background:transparent;color:rgba(245,217,154,.8);font-size:11px;
+  border-radius:6px;cursor:pointer;transition:all .15s}
+.btn-logout:hover{background:rgba(155,40,40,.2);color:#ffaaaa}
+
+/* ─── Tabs ─── */
+.tabs{background:#221408;display:flex;border-bottom:1px solid rgba(200,136,42,.2);
+  padding:0 24px;overflow-x:auto}
+.tab{padding:10px 16px;font-size:12px;color:rgba(245,217,154,.5);cursor:pointer;
+  letter-spacing:1px;border-bottom:2px solid transparent;
+  transition:all .2s;white-space:nowrap;user-select:none}
+.tab:hover{color:#e6b060}
+.tab.active{color:#e6b060;border-bottom-color:#c8882a}
+
+/* ─── Content ─── */
+.content{flex:1;padding:24px;max-width:1100px;margin:0 auto;width:100%}
+.panel{display:none}
+.panel.active{display:block}
+
+/* ─── Cards ─── */
+.card{background:white;border:1px solid #d4b896;border-radius:12px;
+  padding:20px;box-shadow:0 2px 10px rgba(100,60,0,.08);margin-bottom:16px}
+.card-title{font-size:14px;font-weight:600;color:#3d2e1a;margin-bottom:14px;
+  display:flex;align-items:center;gap:7px}
+.card-title::before{content:'';width:3px;height:14px;background:#c8882a;
+  border-radius:2px;flex-shrink:0}
+
+/* ─── Form ─── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group.full{grid-column:1/-1}
+.form-group label{font-size:11px;color:#6b5540;font-weight:500}
+.form-group input,.form-group select,.form-group textarea{
+  border:1px solid #d4b896;border-radius:7px;padding:7px 10px;
+  font-size:13px;background:#f7efe0;color:#1a1209;outline:none;
+  transition:border-color .2s;width:100%;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{
+  border-color:#c8882a;background:white}
+.form-group textarea{resize:vertical;min-height:64px}
+.btn-row{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:4px;padding:8px 16px;
+  border-radius:7px;font-size:12px;cursor:pointer;transition:all .15s;
+  border:none;font-weight:500;font-family:inherit}
+.btn-primary{background:linear-gradient(135deg,#2c1a08,#3d2410);
+  color:#e6b060;border:1px solid #c8882a}
+.btn-primary:hover{background:linear-gradient(135deg,#3d2410,#5a3518)}
+.btn-secondary{background:#f7efe0;color:#3d2e1a;border:1px solid #d4b896}
+.btn-secondary:hover{background:#ede0c8}
+.btn-danger{background:rgba(155,40,40,.08);color:#9b2828;border:1px solid rgba(155,40,40,.3)}
+.btn-danger:hover{background:rgba(155,40,40,.15)}
+
+/* ─── Notice bar ─── */
+.notice{padding:10px 14px;border-radius:8px;font-size:12px;
+  margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.notice.info{background:rgba(200,136,42,.06);border:1px solid rgba(200,136,42,.2);color:#6b5540}
+.notice.ok{background:rgba(26,96,48,.08);border:1px solid rgba(26,96,48,.3);color:#1a6030}
+.notice.err{background:rgba(155,40,40,.08);border:1px solid rgba(155,40,40,.3);color:#9b2828}
+
+/* ─── Member grid ─── */
+.member-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.member-card{background:white;border:1px solid #d4b896;border-radius:10px;
+  padding:13px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.member-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,#c8882a,#e6b060);transform:scaleX(0);
+  transition:transform .2s;transform-origin:left}
+.member-card.mine::before{transform:scaleX(1)}
+.member-card:hover{box-shadow:0 4px 20px rgba(100,60,0,.15);transform:translateY(-2px)}
+.member-card:hover::before{transform:scaleX(1)}
+.member-avatar{width:42px;height:42px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:700;margin-bottom:8px}
+.male{background:rgba(50,80,150,.1);color:#2a4a8a;border:1px solid rgba(50,80,150,.2)}
+.female{background:rgba(155,40,80,.1);color:#8a2a50;border:1px solid rgba(155,40,80,.2)}
+.member-name{font-size:14px;font-weight:700;color:#1a1209;margin-bottom:3px}
+.member-info{font-size:11px;color:#6b5540;line-height:1.5}
+.member-tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;
+.member-card.deceased{opacity:.82;background:linear-gradient(135deg,#f8f5f0,#f0ebe0)}
+  margin-top:6px;background:rgba(200,136,42,.1);color:#7a5010;
+  border:1px solid rgba(200,136,42,.25)}
+.del-btn{position:absolute;top:7px;right:7px;width:20px;height:20px;
+  border-radius:50%;border:1px solid rgba(155,40,40,.3);
+  background:rgba(155,40,40,.06);color:#9b2828;font-size:10px;
+  cursor:pointer;display:none;align-items:center;justify-content:center}
+.member-card:hover .del-btn{display:flex}
+
+/* ─── Empty state ─── */
+.empty{text-align:center;padding:40px 20px;color:#6b5540}
+.empty-icon{font-size:40px;margin-bottom:10px}
+.empty h3{font-size:14px;color:#3d2e1a;margin-bottom:6px;font-weight:600}
+.empty p{font-size:12px;line-height:1.7}
+
+/* ─── Search ─── */
+.search-row{display:flex;gap:8px;margin-bottom:14px}
+.search-row input{flex:1;padding:8px 12px;border:1px solid #c4a070;
+  border-radius:9px;font-size:13px;background:white;outline:none;
+  transition:border-color .2s}
+.search-row input:focus{border-color:#c8882a}
+.search-btn{background:#c8882a;color:white;border:none;border-radius:9px;
+  padding:8px 14px;cursor:pointer;font-size:13px}
+
+/* ─── Tree ─── */
+.tree-box{background:white;border:1px solid #d4b896;border-radius:12px;
+  overflow:hidden;box-shadow:0 2px 10px rgba(100,60,0,.08)}
+.tree-bar{display:flex;align-items:center;gap:8px;padding:11px 16px;
+  background:#f7efe0;border-bottom:1px solid #ede0c8;flex-wrap:wrap}
+.tree-bar h3{font-size:13px;color:#3d2e1a;flex:1;font-weight:600}
+.zoom-btn{width:28px;height:28px;border:1px solid #d4b896;border-radius:6px;
+  background:white;cursor:pointer;font-size:14px;display:flex;
+  align-items:center;justify-content:center;transition:all .15s}
+.zoom-btn:hover{background:#ede0c8;border-color:#c8882a}
+#tree-wrap{padding:20px;overflow:auto;min-height:280px}
+
+/* ─── Photos ─── */
+.upload-zone{border:2px dashed #c4a070;border-radius:10px;padding:28px 20px;
+  text-align:center;cursor:pointer;transition:all .2s;background:#f7efe0;
+  position:relative}
+.upload-zone:hover{border-color:#c8882a;background:rgba(200,136,42,.04)}
+.upload-zone input{display:none}
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:14px}
+.photo-item{position:relative;border-radius:9px;overflow:hidden;
+  border:1px solid #d4b896;aspect-ratio:1;background:#f7efe0}
+.photo-item img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-overlay{position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(transparent,rgba(20,10,2,.8));padding:5px 7px}
+.photo-name{font-size:10px;color:#f5d99a;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.photo-del{position:absolute;top:4px;right:4px;width:18px;height:18px;
+  border-radius:50%;background:rgba(155,40,40,.85);color:white;
+  border:none;font-size:10px;cursor:pointer;display:none;
+  align-items:center;justify-content:center}
+.photo-item:hover .photo-del{display:flex}
+.assign-sel{position:absolute;top:4px;left:4px}
+.assign-sel select{font-size:9px;padding:1px 3px;border-radius:3px;
+  border:1px solid rgba(200,136,42,.5);background:rgba(20,10,2,.75);
+  color:#f5d99a;cursor:pointer;max-width:75px}
+
+/* ─── Preface ─── */
+.preface-preview{background:#f7efe0;border:1px solid #d4b896;border-radius:9px;
+  padding:20px;font-size:13px;line-height:2.1;color:#3d2e1a;
+  white-space:pre-wrap;min-height:100px}
+
+/* ─── PDF ─── */
+.pdf-hero{background:linear-gradient(135deg,#1a0e05,#2c1a08);border-radius:11px;
+  padding:22px;color:#f5d99a;text-align:center;margin-bottom:16px}
+.pdf-hero-icon{font-size:40px;margin-bottom:8px}
+.pdf-hero-title{font-size:17px;font-weight:700;letter-spacing:3px;margin-bottom:4px}
+.pdf-hero-sub{font-size:11px;color:rgba(200,136,42,.7);letter-spacing:2px}
+.pdf-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.pdf-opt{background:white;border:1px solid #d4b896;border-radius:9px;
+  padding:12px;cursor:pointer;transition:all .15s}
+.pdf-opt:hover{border-color:#e6b060}
+.pdf-opt.on{border-color:#c8882a;background:rgba(200,136,42,.04)}
+.pdf-opt-title{font-size:12px;font-weight:700;color:#3d2e1a;margin-bottom:3px}
+.pdf-opt-desc{font-size:11px;color:#6b5540;line-height:1.5}
+
+/* ─── Modal ─── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:#fdf8f0;border:1px solid #c4a070;border-radius:14px;
+  max-width:520px;width:100%;max-height:85vh;overflow-y:auto;
+  box-shadow:0 16px 50px rgba(0,0,0,.35)}
+.modal-head{display:flex;align-items:center;padding:16px 20px 12px;
+  border-bottom:1px solid #ede0c8}
+.modal-head h3{font-size:15px;font-weight:600;color:#1a1209;flex:1}
+.modal-x{width:24px;height:24px;border-radius:5px;border:1px solid #d4b896;
+  background:white;cursor:pointer;font-size:12px;display:flex;
+  align-items:center;justify-content:center;color:#6b5540;transition:all .15s}
+.modal-x:hover{background:#ede0c8;color:#9b2828}
+.modal-body{padding:16px 20px 20px}
+
+/* ─── Toast ─── */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:#2c1a08;color:#e6b060;padding:10px 20px;border-radius:20px;
+  font-size:12px;border:1px solid #c8882a;box-shadow:0 4px 18px rgba(0,0,0,.3);
+  z-index:200;opacity:0;transition:all .3s;white-space:nowrap;
+  max-width:90vw;text-align:center;cursor:pointer}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.toast.err{background:#6b1a1a;border-color:#c43a3a}
+
+/* ─── Misc ─── */
+.divider{height:1px;background:#ede0c8;margin:14px 0}
+.section-label{font-size:12px;color:#6b5540;letter-spacing:1px;
+  margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.section-label::after{content:'';flex:1;height:1px;background:#ede0c8}
+</style>
+</head>
+<body>
+
+<!-- ═══ AUTH SCREEN ═══ -->
+<div id="auth-screen" class="screen active">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <div class="seal">谱</div>
+      <h1>丁氏家谱系统</h1>
+      <p>丁氏一脉 · 血脉相承</p>
+    </div>
+
+    <div id="state-email">
+      <div class="auth-field">
+        <label>你的邮箱地址</label>
+        <input type="email" id="inp-email" placeholder="name@example.com"
+               onkeydown="if(event.key==='Enter')doSendLink()">
+      </div>
+      <button class="btn-main" onclick="doSendLink()" id="send-btn">发送登录链接</button>
+      <div class="auth-note">
+        输入邮箱 → 点按钮 → 去邮箱点链接 → 自动登录<br>
+        <small>首次使用会自动注册，无需单独注册</small>
+      </div>
+      <div class="auth-alt">
+        已有密码？<a onclick="showState('password')">用密码登录</a>
+      </div>
+    </div>
+
+    <div id="state-sent" style="display:none;text-align:center;padding:10px 0">
+      <div style="font-size:44px;margin-bottom:12px">📬</div>
+      <div style="font-size:15px;font-weight:700;color:#1a6030;margin-bottom:8px">链接已发送！</div>
+      <div style="font-size:12px;color:#6b5540;line-height:1.9;margin-bottom:14px">
+        请检查邮箱 <strong id="sent-to"></strong><br>
+        点击邮件中的链接即可登录<br>
+        <small>没收到？检查垃圾邮件夹，或等30秒后重试</small>
+      </div>
+      <button class="btn-main" onclick="showState('email')" style="padding:9px">重新输入邮箱</button>
+    </div>
+
+    <div id="state-password" style="display:none">
+      <div class="auth-field">
+        <label>邮箱</label>
+        <input type="email" id="inp-pw-email" placeholder="name@example.com">
+      </div>
+      <div class="auth-field">
+        <label>密码</label>
+        <input type="password" id="inp-pw-pass" placeholder="你的密码"
+               onkeydown="if(event.key==='Enter')doPasswordLogin()">
+      </div>
+      <button class="btn-main" onclick="doPasswordLogin()">登 入</button>
+      <div class="auth-alt" style="margin-top:10px">
+        <a onclick="showState('email')">← 用邮箱链接登录</a>
+      </div>
+    </div>
+
+    <div id="auth-msg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ═══ APP SCREEN ═══ -->
+<div id="app-screen" class="screen">
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="top-seal"><span>谱</span></div>
+      <div class="top-title">
+        <h1 id="app-title">丁氏家谱系统</h1>
+        <p>丁氏一脉 · 血脉相承 · 云端同步</p>
+      </div>
+      <div class="top-right">
+        <div class="top-stats">
+          <div class="top-stat">
+            <div class="top-stat-num" id="stat-members">0</div>
+            <div class="top-stat-label">族员</div>
+          </div>
+          <div class="top-stat">
+            <div class="top-stat-num" id="stat-gen">0</div>
+            <div class="top-stat-label">世代</div>
+          </div>
+        </div>
+        <div class="top-user">
+          <div class="top-user-avatar" id="user-av">?</div>
+          <div class="top-user-name" id="user-nm">…</div>
+        </div>
+        <button class="btn-logout" onclick="doLogout()">退出</button>
+      </div>
+    </div>
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('add')">✦ 录入族员</div>
+      <div class="tab" onclick="showTab('search')">⊙ 检索查询</div>
+      <div class="tab" onclick="showTab('tree')">❖ 族谱图谱</div>
+      <div class="tab" onclick="showTab('photos')">◉ 族员照片</div>
+      <div class="tab" onclick="showTab('preface')">卷 家族序言</div>
+      <div class="tab" onclick="showTab('pdf')">⬇ 导出PDF</div>
+      <div class="tab" onclick="showTab('map')">🗺 族人分布</div>
+    </div>
+  </div>
+
+  <!-- Content panels -->
+  <div class="content">
+
+    <!-- ADD -->
+    <div class="panel active" id="tab-add">
+      <div class="notice info" id="db-notice">
+        🔐 你只能修改或删除<strong>自己录入</strong>的记录（金色顶栏）。
+        <button onclick="doTestConn()" style="margin-left:auto;padding:3px 9px;
+          background:transparent;border:1px solid #c4a070;border-radius:5px;
+          font-size:11px;color:#6b5540;cursor:pointer">🔗 测试连接</button>
+      </div>
+      <div class="card">
+        <div class="card-title" id="form-title">新增族员信息</div>
+        <div class="form-grid">
+          <div class="form-group"><label>姓名 *</label><input id="f-name" placeholder="例：张明远"></div>
+          <div class="form-group"><label>字号</label><input id="f-style" placeholder="例：子涵"></div>
+          <div class="form-group"><label>性别 *</label>
+            <select id="f-gender"><option value="">— 选择 —</option>
+              <option value="male">男</option><option value="female">女</option></select></div>
+          <div class="form-group"><label>出生年份</label><input id="f-birth" placeholder="例：1958 或 民国47年"></div>
+          <div class="form-group"><label>出生月份</label><input id="f-birth-date" placeholder="例：1958年3月"></div>
+          <div class="form-group"><label>去世年份</label><input id="f-death" placeholder="例：2005（在世请留空）"></div>
+          <div class="form-group"><label>去世月份</label><input id="f-death-date" placeholder="例：2005年7月"></div>
+          <div class="form-group"><label>祖籍</label><input id="f-hometown" placeholder="例：湖南省 长沙县"></div>
+          <div class="form-group"><label>现居地</label><input id="f-location" placeholder="例：广东省 深圳市"></div>
+          <div class="form-group"><label>父亲姓名</label><input id="f-father" placeholder="建立父子关联"></div>
+          <div class="form-group"><label>母亲姓名</label><input id="f-mother" placeholder="母亲姓名"></div>
+          <div class="form-group"><label>配偶姓名</label><input id="f-spouse" placeholder="配偶姓名"></div>
+          <div class="form-group"><label>辈分</label><input id="f-gen" placeholder="例：第五世 / 仁字辈"></div>
+          <div class="form-group"><label>堂号</label><input id="f-clan" placeholder="例：清河堂"></div>
+          <div class="form-group full"><label>职业 / 成就</label><input id="f-job" placeholder="例：教师、企业家"></div>
+          <div class="form-group full"><label>备注 / 传记</label>
+            <textarea id="f-notes" placeholder="人物事迹、迁徙记录……"></textarea></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="save-btn" onclick="doSaveMember()">＋ 保存至云端</button>
+          <button class="btn btn-secondary" onclick="doClearForm()">清空</button>
+        </div>
+      </div>
+      <div class="section-label">全部族员</div>
+      <div class="member-grid" id="members-list">
+        <div class="empty"><div class="empty-icon">📜</div>
+          <h3>暂无族员记录</h3><p>从上方表单录入第一位族员</p></div>
+      </div>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="panel" id="tab-search">
+      <div class="card">
+        <div class="card-title">族员检索</div>
+        <div class="search-row">
+          <input id="search-q" placeholder="输入姓名、祖籍、堂号…" oninput="doSearch()">
+          <button class="search-btn" onclick="doSearch()">搜索</button>
+        </div>
+        <div class="member-grid" id="search-results"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">关系推导</div>
+        <div class="form-grid">
+          <div class="form-group"><label>族员甲</label><input id="rel-a" placeholder="姓名"></div>
+          <div class="form-group"><label>族员乙</label><input id="rel-b" placeholder="姓名"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doRelation()">推算关系</button>
+        </div>
+        <div id="rel-out" style="display:none;margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- TREE -->
+    <div class="panel" id="tab-tree">
+      <div class="tree-box">
+        <div class="tree-bar">
+          <h3>族谱图谱</h3>
+          <button class="zoom-btn" onclick="doZoom(1.2)">＋</button>
+          <button class="zoom-btn" onclick="doZoom(0.83)">－</button>
+          <button class="zoom-btn" onclick="doZoom(1)" style="font-size:10px;width:36px">重置</button>
+          <button class="btn btn-secondary" style="padding:4px 10px;font-size:11px"
+                  onclick="renderTree()">刷新</button>
+        </div>
+        <div id="tree-wrap"><svg id="tree-svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      </div>
+    </div>
+
+    <!-- PHOTOS -->
+    <div class="panel" id="tab-photos">
+      <div class="card">
+        <div class="card-title">上传照片</div>
+        <div class="upload-zone" onclick="document.getElementById('photo-file-input').click()">
+          <input type="file" id="photo-file-input" accept="image/*" multiple
+                 style="display:none" onchange="doUploadPhotos(event)">
+          <div style="font-size:30px;margin-bottom:8px">📷</div>
+          <div style="font-size:13px;color:#3d2e1a;margin-bottom:3px">点击上传族员照片</div>
+          <div style="font-size:11px;color:#6b5540">支持 JPG、PNG，可批量上传</div>
+          <button onclick="event.stopPropagation();document.getElementById('photo-file-input').click()"
+            style="margin-top:12px;padding:7px 20px;background:linear-gradient(135deg,#2c1a08,#3d2410);
+            color:#e6b060;border:1px solid #c8882a;border-radius:7px;font-size:12px;cursor:pointer">
+            选择照片
+          </button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">排序</div>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-secondary" onclick="doSortPhotos('gen')">按辈分</button>
+          <button class="btn btn-secondary" onclick="doSortPhotos('birth')">按出生年</button>
+          <button class="btn btn-secondary" onclick="doSortPhotos('name')">按姓名</button>
+        </div>
+      </div>
+      <div class="section-label">照片库</div>
+      <div class="photo-grid" id="photo-grid">
+        <div class="empty" style="grid-column:1/-1">
+          <div class="empty-icon">🖼️</div>
+          <h3>尚无照片</h3><p>上传后按辈分自动排列</p></div>
+      </div>
+    </div>
+
+    <!-- PREFACE -->
+    <div class="panel" id="tab-preface">
+      <div class="card">
+        <div class="card-title">家族序言</div>
+        <div class="form-grid" style="margin-bottom:12px">
+          <div class="form-group">
+            <label>家族名称</label>
+            <input id="pref-name" placeholder="例：清河张氏" oninput="previewPreface()">
+          </div>
+          <div class="form-group">
+            <label>编修年份</label>
+            <input id="pref-year" placeholder="例：2025年" oninput="previewPreface()">
+          </div>
+          <div class="form-group full">
+            <label>始迁祖</label>
+            <input id="pref-anc" placeholder="例：始祖张德厚，清道光年间自湖南长沙迁居…" oninput="previewPreface()">
+          </div>
+          <div class="form-group full">
+            <label>序言正文</label>
+            <textarea id="pref-text" style="min-height:160px"
+              placeholder="盖闻水有源，树有根，人有祖……" oninput="previewPreface()"></textarea>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="doGenPreface()">✦ 自动生成草稿</button>
+          <button class="btn btn-primary" onclick="doSavePreface()">保存序言</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">预览</div>
+        <div class="preface-preview" id="pref-preview">序言将在此显示…</div>
+      </div>
+    </div>
+
+    <!-- PDF -->
+    <div class="panel" id="tab-pdf">
+      <div class="pdf-hero">
+        <div class="pdf-hero-icon">📜</div>
+        <div class="pdf-hero-title" id="pdf-title">家族族谱</div>
+        <div class="pdf-hero-sub">点击下方按钮生成 PDF 副本</div>
+      </div>
+      <div class="card">
+        <div class="card-title">PDF 设置</div>
+        <div class="pdf-opts">
+          <div class="pdf-opt on" id="po-preface" onclick="this.classList.toggle('on')">
+            <div class="pdf-opt-title">✦ 家族序言</div>
+            <div class="pdf-opt-desc">家族介绍，谱首第一页</div>
+          </div>
+          <div class="pdf-opt on" id="po-list" onclick="this.classList.toggle('on')">
+            <div class="pdf-opt-title">⊙ 族员名录</div>
+            <div class="pdf-opt-desc">按辈分排列全部族员</div>
+          </div>
+          <div class="pdf-opt on" id="po-tree" onclick="this.classList.toggle('on')">
+            <div class="pdf-opt-title">❖ 世系关系</div>
+            <div class="pdf-opt-desc">父子传承关系说明</div>
+          </div>
+          <div class="pdf-opt on" id="po-photos" onclick="this.classList.toggle('on')">
+            <div class="pdf-opt-title">◉ 族员照片</div>
+            <div class="pdf-opt-desc">按辈分排序照片集</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>家族名称</label>
+            <input id="pdf-clan" placeholder="例：清河张氏家谱"
+                   oninput="document.getElementById('pdf-title').textContent=this.value||'家族族谱'">
+          </div>
+          <div class="form-group">
+            <label>版次说明</label>
+            <input id="pdf-ed" placeholder="例：二〇二五年续修本">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="doGenPDF()">⬇ 生成并下载 PDF</button>
+        </div>
+        <div id="pdf-msg" style="margin-top:8px;font-size:12px;color:#6b5540"></div>
+      </div>
+    </div>
+
+    <!-- MAP -->
+    <div class="panel" id="tab-map">
+      <div class="map-stats">
+        <div class="map-stat"><strong id="map-stat-cities">0</strong>城市</div>
+        <div class="map-stat"><strong id="map-stat-provinces">0</strong>省份</div>
+        <div class="map-stat"><strong id="map-stat-countries">0</strong>国家/地区</div>
+      </div>
+      <div class="map-legend">
+        <span><span class="legend-dot" style="background:#2563eb"></span>现居地</span>
+        <span style="color:var(--ink3);font-size:12px">数字 = 该地族人数量，点击查看详情</span>
+      </div>
+      <div id="map-container"></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--ink3)">
+        💡 地图根据「现居地」字段自动定位。填写越详细定位越准确，如：广东省 深圳市 南山区。
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /app-screen -->
+
+<!-- Modal -->
+<div class="modal-bg" id="modal" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="modal-title">族员详情</h3>
+      <button class="modal-x" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast" onclick="this.classList.remove('show')"></div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────
+const SB_URL = 'https://zrlqijlnlhahdpudojov.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpybHFpamxubGhhaGRwdWRvam92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NzE4NDAsImV4cCI6MjA5MDE0Nzg0MH0.HCcDEVCdVUOrTei-dFjAXA7paiC-Elo0vmlHqsaO2rI';
+
+// ─── STATE ────────────────────────────────────────────────
+let db, me, members = [], photos = [], pref = {};
+let treeScale = 1, photoSort = 'gen', editId = null;
+
+// ─── INIT ─────────────────────────────────────────────────
+window.onload = function() {
+  // 注册 Service Worker（PWA离线支持）
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  const { createClient } = supabase;
+  db = createClient(SB_URL, SB_KEY);
+
+  db.auth.onAuthStateChange(async (evt, session) => {
+    if (evt === 'SIGNED_IN' && session) {
+      await loadUser(session.user);
+      showScreen('app');
+    } else if (evt === 'SIGNED_OUT') {
+      me = null;
+      showScreen('auth');
+    }
+  });
+
+  db.auth.getSession().then(({ data: { session } }) => {
+    if (session) {
+      loadUser(session.user).then(() => showScreen('app'));
+    }
+  });
+};
+
+// ─── SCREENS ──────────────────────────────────────────────
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(name + '-screen').classList.add('active');
+  if (name === 'app') loadAll();
+}
+
+// ─── TABS ─────────────────────────────────────────────────
+function showTab(name) {
+  const tabNames = ['add','search','tree','photos','preface','pdf','map'];
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', tabNames[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'tree') renderTree();
+  if (name === 'search') doSearch();
+  if (name === 'map') renderMap();
+}
+
+// ─── AUTH ─────────────────────────────────────────────────
+function showState(s) {
+  ['email','sent','password'].forEach(n => {
+    document.getElementById('state-' + n).style.display = n === s ? '' : 'none';
+  });
+  clearAuthMsg();
+}
+
+function showAuthMsg(txt, isErr) {
+  const el = document.getElementById('auth-msg');
+  el.textContent = txt;
+  el.className = 'msg ' + (isErr ? 'error' : 'success') + ' show';
+}
+function clearAuthMsg() {
+  document.getElementById('auth-msg').className = 'msg';
+}
+
+async function doSendLink() {
+  const email = document.getElementById('inp-email').value.trim();
+  if (!email || !email.includes('@')) { showAuthMsg('请输入正确的邮箱地址', true); return; }
+  const btn = document.getElementById('send-btn');
+  btn.textContent = '发送中…'; btn.disabled = true;
+  clearAuthMsg();
+  const redirectTo = window.location.href.split('#')[0].split('?')[0];
+  const { error } = await db.auth.signInWithOtp({
+    email, options: { emailRedirectTo: redirectTo, shouldCreateUser: true }
+  });
+  btn.textContent = '发送登录链接'; btn.disabled = false;
+  if (error) { showAuthMsg('发送失败：' + error.message, true); return; }
+  document.getElementById('sent-to').textContent = email;
+  showState('sent');
+}
+
+async function doPasswordLogin() {
+  const email = document.getElementById('inp-pw-email').value.trim();
+  const pass  = document.getElementById('inp-pw-pass').value;
+  if (!email || !pass) { showAuthMsg('请填写邮箱和密码', true); return; }
+  clearAuthMsg();
+  const { error } = await db.auth.signInWithPassword({ email, password: pass });
+  if (error) showAuthMsg('登录失败：' + error.message, true);
+}
+
+async function doLogout() {
+  await db.auth.signOut();
+}
+
+async function loadUser(user) {
+  const { data: p } = await db.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  me = { id: user.id, email: user.email,
+         name: p?.display_name || user.email.split('@')[0],
+         role: p?.role || 'member' };
+  if (!p) {
+    await db.from('profiles').upsert(
+      { id: user.id, display_name: me.name, role: 'member' },
+      { onConflict: 'id', ignoreDuplicates: true }
+    );
+  }
+  document.getElementById('user-nm').textContent = me.name;
+  document.getElementById('user-av').textContent = me.name.charAt(0);
+}
+
+// ─── LOAD DATA ────────────────────────────────────────────
+async function loadAll() {
+  await loadMembers();
+  await loadPhotos();
+  await loadPreface();
+}
+
+async function loadMembers() {
+  const { data, error } = await db.from('members').select('*').order('created_at');
+  if (error) { toast('❌ 加载族员失败：' + error.message, true); return; }
+  members = (data || []).map(r => ({
+    id: r.id, by: r.created_by, byEmail: r.created_by_email,
+    name: r.name, style: r.style, gender: r.gender, birth: r.birth,
+    hometown: r.hometown, location: r.location, father: r.father_name,
+    spouse: r.spouse, gen: r.generation, clan: r.clan,
+    job: r.occupation, notes: r.notes
+  }));
+  renderMembers();
+  updateStats();
+}
+
+async function loadPhotos() {
+  let { data, error } = await db.from('photos').select('*').order('upload_time');
+  if (error) {
+    // Fallback: try without ordering (in case upload_time column doesn't exist)
+    const res = await db.from('photos').select('*');
+    data  = res.data;
+    error = res.error;
+  }
+  if (error) { toast('❌ 加载照片失败：' + error.message, true); return; }
+  photos = (data || []).map(r => ({
+    id: r.id, by: r.created_by, url: r.data_url,
+    name: r.file_name, to: r.assigned_to
+  }));
+  renderPhotos();
+}
+
+async function loadPreface() {
+  const { data } = await db.from('preface').select('*').limit(1).maybeSingle();
+  if (data) {
+    pref = { name: data.clan_name, year: data.year, anc: data.ancestor, text: data.text };
+    if (pref.name) document.getElementById('pref-name').value = pref.name || '';
+    if (pref.year) document.getElementById('pref-year').value = pref.year || '';
+    if (pref.anc)  document.getElementById('pref-anc').value  = pref.anc  || '';
+    if (pref.text) document.getElementById('pref-text').value = pref.text || '';
+    previewPreface();
+    if (pref.name) document.getElementById('app-title').textContent = pref.name + '家谱';
+  }
+}
+
+// ─── MEMBER CRUD ──────────────────────────────────────────
+function isMine(m) {
+  return m && me && (m.by === me.id || me.role === 'admin');
+}
+
+function vv(id) { return (document.getElementById(id)?.value || '').trim(); }
+
+async function doSaveMember() {
+  const name = vv('f-name'), gender = vv('f-gender');
+  if (!name)   { toast('请填写族员姓名', true); return; }
+  if (!gender) { toast('请选择性别', true);     return; }
+
+  const row = {
+    name, style: vv('f-style'), gender, birth: vv('f-birth'),
+    birth_date: vv('f-birth-date'), death: vv('f-death'), death_date: vv('f-death-date'),
+    hometown: vv('f-hometown'), location: vv('f-location'),
+    father_name: vv('f-father'), mother_name: vv('f-mother'), spouse: vv('f-spouse'),
+    generation: vv('f-gen'), clan: vv('f-clan'),
+    occupation: vv('f-job'), notes: vv('f-notes')
+  };
+
+  if (editId) {
+    // UPDATE
+    const { error } = await db.from('members').update({...row, updated_at: new Date()}).eq('id', editId);
+    if (error) { toast('❌ 更新失败：' + error.message, true); return; }
+    const idx = members.findIndex(m => m.id === editId);
+    if (idx >= 0) members[idx] = { ...members[idx], ...mapRow({...row, id: editId, created_by: me.id}) };
+    editId = null;
+    document.getElementById('form-title').textContent = '新增族员信息';
+    document.getElementById('save-btn').textContent = '＋ 保存至云端';
+    toast('✓ 记录已更新：' + name);
+  } else {
+    // INSERT
+    const { data, error } = await db.from('members').insert({
+      ...row, created_by: me.id, created_by_email: me.email
+    }).select().single();
+    if (error) { toast('❌ 保存失败：' + error.message, true); return; }
+    members.push(mapRow(data));
+    toast('✓ 已保存至云端：' + name);
+  }
+
+  doClearForm();
+  renderMembers();
+  updateStats();
+}
+
+function mapRow(r) {
+  return { id: r.id, by: r.created_by, byEmail: r.created_by_email,
+           name: r.name, style: r.style, gender: r.gender, birth: r.birth,
+           birthDate: r.birth_date, death: r.death, deathDate: r.death_date,
+           hometown: r.hometown, location: r.location, father: r.father_name, mother: r.mother_name,
+           spouse: r.spouse, gen: r.generation, clan: r.clan,
+           job: r.occupation, notes: r.notes };
+}
+
+async function doDeleteMember(id, e) {
+  if (e) e.stopPropagation();
+  const m = members.find(x => x.id === id);
+  if (!m || !isMine(m)) { toast('❌ 只能删除自己录入的记录', true); return; }
+  if (!confirm('确认删除族员"' + m.name + '"？')) return;
+  const { error } = await db.from('members').delete().eq('id', id);
+  if (error) { toast('❌ 删除失败：' + error.message, true); return; }
+  members = members.filter(x => x.id !== id);
+  renderMembers(); updateStats();
+  closeModal();
+  toast('已删除：' + m.name);
+}
+
+function doEditMember(id) {
+  const m = members.find(x => x.id === id);
+  if (!m || !isMine(m)) return;
+  closeModal();
+  showTab2('add');
+  editId = id;
+  const s = (fid, val) => { const el = document.getElementById(fid); if (el) el.value = val || ''; };
+  s('f-name', m.name); s('f-style', m.style); s('f-birth', m.birth);
+  s('f-birth-date', m.birthDate); s('f-death', m.death); s('f-death-date', m.deathDate);
+  s('f-hometown', m.hometown); s('f-location', m.location);
+  s('f-father', m.father); s('f-mother', m.mother); s('f-spouse', m.spouse);
+  s('f-gen', m.gen); s('f-clan', m.clan);
+  s('f-job', m.job); s('f-notes', m.notes);
+  document.getElementById('f-gender').value = m.gender || '';
+  document.getElementById('form-title').textContent = '修改族员：' + m.name;
+  document.getElementById('save-btn').textContent = '💾 更新记录';
+  window.scrollTo(0, 0);
+  toast('正在编辑：' + m.name);
+}
+
+function doClearForm() {
+  ['f-name','f-style','f-birth','f-birth-date','f-death','f-death-date','f-hometown','f-location',
+   'f-father','f-mother','f-spouse','f-gen','f-clan','f-job','f-notes'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('f-gender').value = '';
+  editId = null;
+  document.getElementById('form-title').textContent = '新增族员信息';
+  document.getElementById('save-btn').textContent = '＋ 保存至云端';
+}
+
+// Helper to switch tabs without needing the event object
+function showTab2(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const names = ['add','search','tree','photos','preface','pdf'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ─── RENDER ───────────────────────────────────────────────
+// ─── SPOUSE HELPERS ───────────────────────────────────────
+// Returns virtual spouse objects for spouses not yet in the members list
+function getVirtualSpouses() {
+  const names = new Set(members.map(m => m.name));
+  const seen  = new Set();
+  const virtual = [];
+  members.forEach(m => {
+    if (!m.spouse) return;
+    const spName = m.spouse.trim();
+    if (!spName || names.has(spName) || seen.has(spName)) return;
+    seen.add(spName);
+    // Infer gender opposite to member
+    const inferGender = m.gender === 'male' ? 'female' : 'male';
+    virtual.push({
+      id: 'virtual_' + spName,
+      name: spName,
+      gender: inferGender,
+      virtual: true,          // flag: not a real DB record
+      spouseOf: m.name,       // linked to this member
+      gen: m.gen || '',
+      birth: '', hometown: '', father: '', clan: m.clan || '',
+      by: null
+    });
+  });
+  return virtual;
+}
+
+function allMembers() {
+  return [...members, ...getVirtualSpouses()];
+}
+
+function renderMembers() {
+  const el = document.getElementById('members-list');
+  if (!members.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📜</div>' +
+      '<h3>暂无族员记录</h3><p>从上方表单录入第一位族员</p></div>';
+    return;
+  }
+  const virtual = getVirtualSpouses();
+  const allCards = [
+    ...members.map(m => memberCard(m)),
+    ...virtual.map(m => memberCard(m))
+  ];
+  el.innerHTML = allCards.join('');
+}
+
+function memberCard(m) {
+  // ── Virtual spouse card (not yet in DB) ──
+  if (m.virtual) {
+    const cls = m.gender === 'female' ? 'female' : 'male';
+    return `<div class="member-card" style="opacity:.75;border-style:dashed"
+        onclick="promptAddSpouse('${m.name}','${m.spouseOf}')">
+      <div class="member-avatar ${cls}" style="border-style:dashed">${m.name.charAt(0)}</div>
+      <div class="member-name">${m.name}</div>
+      <div class="member-info"><div>${m.spouseOf} 的配偶</div></div>
+      <span class="member-tag" style="background:rgba(100,60,180,.08);color:#5030a0;border-color:rgba(100,60,180,.25)">配偶（未录入）</span>
+    </div>`;
+  }
+  // ── Normal member card ──
+  const mine = isMine(m);
+  const cls  = m.gender === 'female' ? 'female' : 'male';
+  const ph   = photos.find(p => p.to === m.name);
+  const av   = ph ? `<img src="${ph.url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+                  : m.name.charAt(0);
+  const isDead = !!m.death;
+  // Compute lifespan if both birth and death are known
+  const lifespan = (m.birth && m.death)
+    ? (() => { const b=parseInt(m.birth), d=parseInt(m.death); return (!isNaN(b)&&!isNaN(d)) ? `享年${d-b}岁` : ''; })()
+    : '';
+  return `<div class="member-card ${mine ? 'mine' : ''} ${isDead ? 'deceased' : ''}" onclick="openModal('${m.id}')">
+    ${mine ? `<button class="del-btn" onclick="doDeleteMember('${m.id}',event)">✕</button>` : ''}
+    <div class="member-avatar ${cls}">${av}</div>
+    <div class="member-name">${isDead ? '<span style="color:#6b5540;font-size:11px">✝ </span>' : ''}${m.name}${m.style ? ` <span style="font-size:11px;font-weight:400;color:#6b5540">（${m.style}）</span>` : ''}</div>
+    <div class="member-info">
+      ${m.birth||m.death ? `<div>${m.birth||'？'}${m.death ? ' — '+m.death : ''} ${lifespan}</div>` : ''}
+      ${m.hometown ? `<div>籍贯：${m.hometown.split(' ').slice(0,2).join(' ')}</div>` : ''}
+      ${m.father ? `<div>父：${m.father}</div>` : ''}
+      ${m.mother ? `<div>母：${m.mother}</div>` : ''}
+    </div>
+    ${m.gen ? `<span class="member-tag">${m.gen}</span>` : ''}
+    ${isDead ? `<span class="member-tag" style="background:rgba(80,80,80,.08);color:#555;border-color:rgba(80,80,80,.2)">已故</span>` : ''}
+    <span class="member-tag" style="${mine ? 'background:rgba(26,96,48,.1);color:#1a6030;border-color:rgba(26,96,48,.3)' : ''}">${mine ? '我录入' : '他人录入'}</span>
+  </div>`;
+}
+
+// Click on virtual spouse card → pre-fill the add form
+function promptAddSpouse(spouseName, memberName) {
+  if (!confirm(`「${spouseName}」尚未录入，是否现在补充录入详细信息？`)) return;
+  showTab2('add');
+  document.getElementById('f-name').value   = spouseName;
+  document.getElementById('f-spouse').value = memberName;
+  // Infer gender from partner
+  const partner = members.find(m => m.name === memberName);
+  if (partner) {
+    document.getElementById('f-gender').value = partner.gender === 'male' ? 'female' : 'male';
+    if (partner.gen) document.getElementById('f-gen').value  = partner.gen;
+    if (partner.clan) document.getElementById('f-clan').value = partner.clan;
+  }
+  document.getElementById('form-title').textContent = '录入配偶信息：' + spouseName;
+  window.scrollTo(0, 0);
+  toast('正在录入 ' + spouseName + ' 的信息，填写完成后点保存');
+}
+
+function updateStats() {
+  document.getElementById('stat-members').textContent = members.length;
+  const gens = new Set(members.map(m => m.gen).filter(Boolean));
+  document.getElementById('stat-gen').textContent = gens.size || 0;
+}
+
+// ─── SEARCH ───────────────────────────────────────────────
+function doSearch() {
+  const q = (document.getElementById('search-q')?.value || '').trim().toLowerCase();
+  const el = document.getElementById('search-results');
+  if (!el) return;
+  const all = [...members, ...getVirtualSpouses()];
+  const list = q ? all.filter(m =>
+    [m.name, m.style, m.hometown, m.location, m.gen, m.clan, m.job, m.father, m.mother, m.spouseOf]
+      .some(v => v && v.toLowerCase().includes(q))
+  ) : all;
+  el.innerHTML = list.length ? list.map(m => memberCard(m)).join('')
+    : '<div class="empty"><div class="empty-icon">🔍</div><h3>未找到</h3></div>';
+}
+
+function doRelation() {
+  const an = (document.getElementById('rel-a')?.value || '').trim();
+  const bn = (document.getElementById('rel-b')?.value || '').trim();
+  const el = document.getElementById('rel-out');
+  if (!el) return;
+  el.style.display = 'block';
+  const a = members.find(m => m.name.includes(an));
+  const b = members.find(m => m.name.includes(bn));
+  if (!a || !b) { el.innerHTML = '<div class="notice err">未找到对应族员</div>'; return; }
+  let rel = '关系待定', detail = '';
+  if (b.father === a.name) { rel = `${a.name} 是 ${b.name} 的父亲`; detail = '直系一代'; }
+  else if (a.father === b.name) { rel = `${b.name} 是 ${a.name} 的父亲`; detail = '直系一代'; }
+  else if (a.father === b.father && a.father) { rel = `${a.name} 与 ${b.name} 是兄弟/姐妹`; detail = '同父：' + a.father; }
+  else if (a.gen === b.gen && a.clan === b.clan && a.gen) { rel = '同辈族人'; detail = a.gen + ' · ' + a.clan; }
+  else if (a.clan === b.clan && a.clan) { rel = '同族远亲'; detail = '同属 ' + a.clan; }
+  el.innerHTML = `<div class="notice ok"><strong>${rel}</strong>${detail ? ' — ' + detail : ''}</div>`;
+}
+
+// ─── TREE ─────────────────────────────────────────────────
+function renderTree() {
+  const svg = document.getElementById('tree-svg');
+  if (!svg) return;
+  if (!members.length) {
+    svg.setAttribute('width','400'); svg.setAttribute('height','120');
+    svg.innerHTML = '<text x="200" y="60" text-anchor="middle" fill="#6b5540" font-size="13">请先录入族员</text>';
+    return;
+  }
+
+  const virtual = getVirtualSpouses();
+  const allM    = [...members, ...virtual];
+  const byName  = {};
+  allM.forEach(m => { byName[m.name] = m; });
+
+  // ── Parent→child relationships ─────────────────────────
+  // 同时检查 father 和 mother，任意一方在族谱里都建立连接
+  const childrenOf = {}, hasParent = {};
+  members.forEach(m => {
+    // 通过父亲建立关系
+    if (m.father && byName[m.father]) {
+      if (!childrenOf[m.father]) childrenOf[m.father] = [];
+      // 避免重复添加
+      if (!childrenOf[m.father].find(c => c.id === m.id))
+        childrenOf[m.father].push(m);
+      hasParent[m.id] = true;
+    }
+    // 通过母亲建立关系（父亲不在族谱、或只知道母亲是丁氏的情况）
+    if (m.mother && byName[m.mother]) {
+      if (!childrenOf[m.mother]) childrenOf[m.mother] = [];
+      if (!childrenOf[m.mother].find(c => c.id === m.id))
+        childrenOf[m.mother].push(m);
+      hasParent[m.id] = true;
+    }
+  });
+
+  // ── Spouse pairing ─────────────────────────────────────
+  const sideSpouseIds = new Set();
+  const partnerOf = {};
+
+  members.forEach(m => {
+    if (!m.spouse) return;
+    const sp = byName[m.spouse];
+    if (!sp || sp.virtual) return;
+    if (sideSpouseIds.has(sp.id) || sideSpouseIds.has(m.id)) return;
+
+    // 判断各自"独有"的孩子（非共同孩子）
+    const mKids  = childrenOf[m.name]  || [];
+    const spKids = childrenOf[sp.name] || [];
+    const mUniqueKids  = mKids.filter(k  => !spKids.find(k2 => k2.id === k.id));
+    const spUniqueKids = spKids.filter(k => !mKids.find(k2  => k2.id === k.id));
+
+    // 如果双方都有"独有"孩子（前婚孩子等），各自保留为节点，不配对
+    if (mUniqueKids.length > 0 && spUniqueKids.length > 0) return;
+
+    let primary, side;
+    // 谁是丁氏族人（有父母记录）谁做primary
+    if (hasParent[m.id] && !hasParent[sp.id])       { primary = m;  side = sp; }
+    else if (!hasParent[m.id] && hasParent[sp.id])  { primary = sp; side = m;  }
+    // 都是族人或都不是：独有孩子多的做primary
+    else if (mUniqueKids.length >= spUniqueKids.length) { primary = m; side = sp; }
+    else                                               { primary = sp; side = m; }
+
+    sideSpouseIds.add(side.id);
+    partnerOf[primary.id] = side;
+  });
+
+  virtual.forEach(v => {
+    const partner = byName[v.spouseOf];
+    if (partner && !partnerOf[partner.id]) partnerOf[partner.id] = v;
+  });
+
+  const roots = members.filter(m => !hasParent[m.id] && !sideSpouseIds.has(m.id));
+
+  // ── Layout constants ────────────────────────────────────
+  const NW  = 36;   // node width
+  const NH  = 80;   // node height
+  const GY  = 60;   // vertical gap between generations
+  const GX  = 10;   // horizontal gap between siblings within same family
+  const FX  = 40;   // extra gap between different family branches (同世不同家庭)
+  const SPG = 8;    // gap between member and spouse
+
+  const pos = {};   // id → {x, y}
+
+  // ── 第一步：计算每个世代对应的 Y 坐标 ──────────────────
+  const genOrderMap = {};  // memberID → 世代数字
+  allM.forEach(m => {
+    genOrderMap[m.id] = parseGenOrder(m.gen);
+  });
+
+  const allGenValues = [...new Set(Object.values(genOrderMap).filter(v => v < 9000))].sort((a,b)=>a-b);
+  const genYMap = {};  // 世代数字 → Y
+  allGenValues.forEach((gv, idx) => {
+    genYMap[gv] = 20 + idx * (NH + GY);
+  });
+
+  // memberID → Y坐标，优先用自己的gen，没有则用配偶gen，再没有则用孩子gen-1
+  const memberYCache = {};
+  function getMemberY(m, visited = new Set()) {
+    if (memberYCache[m.id] !== undefined) return memberYCache[m.id];
+    if (visited.has(m.id)) return null;
+    visited.add(m.id);
+
+    // 1. 自己有世代
+    const gv = genOrderMap[m.id];
+    if (gv && gv < 9000 && genYMap[gv] !== undefined) {
+      return memberYCache[m.id] = genYMap[gv];
+    }
+
+    // 2. 配偶有世代（配对关系已建立：partnerOf 或 sideSpouseIds）
+    // 找配偶：先看 partnerOf，再看谁的 partnerOf 是自己
+    const spouseAsPartner = Object.entries(partnerOf).find(([pid, sp]) => String(sp.id) === String(m.id));
+    const spouse = partnerOf[m.id] || (spouseAsPartner ? allM.find(x => String(x.id) === spouseAsPartner[0]) : null)
+                || (m.spouse ? byName[m.spouse] : null);
+    if (spouse) {
+      const spY = getMemberY(spouse, visited);
+      if (spY !== null) return memberYCache[m.id] = spY;
+    }
+
+    // 3. 有孩子：用孩子的Y往上推一格
+    const kids = (childrenOf[m.name] || []);
+    for (const kid of kids) {
+      const kidY = getMemberY(kid, visited);
+      if (kidY !== null) {
+        // 找孩子世代对应的前一个世代的Y
+        const kidGv = genOrderMap[kid.id];
+        if (kidGv && kidGv < 9000) {
+          const kidIdx = allGenValues.indexOf(kidGv);
+          if (kidIdx > 0) return memberYCache[m.id] = genYMap[allGenValues[kidIdx - 1]];
+        }
+        return memberYCache[m.id] = kidY - (NH + GY);
+      }
+    }
+
+    // 4. 实在找不到，放最底部
+    const maxY = allGenValues.length > 0 ? genYMap[allGenValues[allGenValues.length - 1]] : 20;
+    return memberYCache[m.id] = maxY;
+  }
+
+  // ── 第二步：递归分配 X 坐标（Y 由世代固定，不再传递）──
+  function layout(m, xStart) {
+    const sp = partnerOf[m.id];
+    const myChildren = (childrenOf[m.name] || []).filter(c => !sideSpouseIds.has(c.id));
+    const spChildren = sp ? (childrenOf[sp.name] || []).filter(c => !sideSpouseIds.has(c.id) && !myChildren.find(x=>x.id===c.id)) : [];
+    const children   = [...myChildren, ...spChildren];
+    const myW = NW + (sp ? SPG + NW : 0);
+    const y   = getMemberY(m) ?? 20;
+
+    // 男左女右：如果 primary 是女性而 side 是男性，交换绘制位置
+    const spouseOnLeft = sp && m.gender === 'female' && sp.gender === 'male';
+
+    let totalW;
+    if (children.length === 0) {
+      pos[m.id] = { x: spouseOnLeft ? xStart + NW + SPG : xStart, y };
+      totalW = myW;
+    } else {
+      let cx = xStart, sumW = 0;
+      children.forEach((child, idx) => {
+        const cw = layout(child, cx);
+        if (idx < children.length - 1) {
+          const nextChild = children[idx + 1];
+          // 同一小家庭的兄弟（同父 OR 同母）用小间距
+          const sameFamily = (child.father && child.father === nextChild.father)
+                          || (child.mother && child.mother === nextChild.mother);
+          // 关键：左边子节点的实际右边界要加上其配偶的宽度
+          const childSp = partnerOf[child.id];
+          const childRight = pos[child.id].x + NW + (childSp ? SPG + NW : 0);
+          // 下一个子节点从 childRight + gap 开始
+          const gap = sameFamily ? GX : FX;
+          cx = childRight + gap;
+          sumW = cx - xStart;
+        } else {
+          const childSp = partnerOf[child.id];
+          const childRight = pos[child.id] ? pos[child.id].x + NW + (childSp ? SPG + NW : 0) : cx + NW;
+          sumW = childRight - xStart;
+        }
+      });
+      const firstChildX    = pos[children[0].id].x;
+      const lastChild      = children[children.length - 1];
+      const lastChildSp    = partnerOf[lastChild.id];
+      const lastChildRight = pos[lastChild.id].x + NW + (lastChildSp ? SPG + NW : 0);
+      // 居中：primary+spouse 整体居中于所有孩子上方
+      const midX = (firstChildX + lastChildRight) / 2 - myW / 2;
+      pos[m.id] = { x: spouseOnLeft ? midX + NW + SPG : midX, y };
+      totalW = Math.max(sumW, myW);
+    }
+
+    // 配偶位置：男左女右
+    if (sp) {
+      const spX = spouseOnLeft ? pos[m.id].x - SPG - NW : pos[m.id].x + NW + SPG;
+      pos[sp.id] = { x: spX, y: getMemberY(sp) ?? y };
+    }
+    return Math.max(totalW, myW);
+  }
+
+  // Layout each root tree horizontally
+  let rootX = 20;
+  roots.forEach(r => {
+    const w = layout(r, rootX);
+    rootX += w + FX * 2;
+  });
+
+  // SVG dimensions
+  let maxX = 0, maxY = 0;
+  Object.values(pos).forEach(p => {
+    maxX = Math.max(maxX, p.x + NW);
+    maxY = Math.max(maxY, p.y + NH);
+  });
+  const svgW = Math.max(500, maxX + 40);
+  const svgH = Math.max(300, maxY + 40);
+  svg.setAttribute('width', svgW);
+  svg.setAttribute('height', svgH);
+  svg.style.transform = `scale(${treeScale})`;
+  svg.style.transformOrigin = 'top left';
+
+  let h = '';
+
+  // ── Parent→child lines ────────────────────────────────
+  // 连线从丁氏族人一方（father或mother中在族谱里的那位）连到孩子
+  // 若父母都在族谱，选 hasParent 的那方（即丁氏正式成员）
+  const drawnLines = new Set();
+  members.forEach(m => {
+    if (drawnLines.has(m.id) || !pos[m.id]) return;
+
+    const fatherNode = m.father ? byName[m.father] : null;
+    const motherNode = m.mother ? byName[m.mother] : null;
+    const fatherPos  = fatherNode ? pos[fatherNode.id] : null;
+    const motherPos  = motherNode ? pos[motherNode.id] : null;
+
+    // 优先选丁氏一方：hasParent 的那方；都是或都不是则优先父
+    let par = null, parPos = null;
+    if (fatherPos && motherPos) {
+      // 两方都在族谱：选 hasParent 的那方（丁氏成员）
+      if (hasParent[motherNode.id] && !hasParent[fatherNode.id]) {
+        par = motherNode; parPos = motherPos;
+      } else {
+        par = fatherNode; parPos = fatherPos;
+      }
+    } else if (fatherPos) {
+      par = fatherNode; parPos = fatherPos;
+    } else if (motherPos) {
+      par = motherNode; parPos = motherPos;
+    }
+    if (!par || !parPos) return;
+
+    drawnLines.add(m.id);
+    const px   = parPos.x + NW / 2;
+    const py   = parPos.y + NH;
+    const cx   = pos[m.id].x + NW / 2;
+    const cy   = pos[m.id].y;
+    const midY = py + (cy - py) / 2;
+    h += `<path d="M${px} ${py} V${midY} H${cx} V${cy}"
+      fill="none" stroke="#6b5540" stroke-width="0.9"/>`;
+  });
+
+  // ── Spouse ♥ lines (horizontal between adjacent nodes) ──
+  Object.entries(partnerOf).forEach(([mid, sp]) => {
+    const primary = allM.find(x => String(x.id) === String(mid));
+    if (!primary || !pos[primary.id] || !pos[sp.id]) return;
+    const x1 = pos[primary.id].x + NW;
+    const x2 = pos[sp.id].x;
+    if (x2 > x1) {
+      const my = pos[primary.id].y + NH / 2;
+      h += `<line x1="${x1}" y1="${my}" x2="${x2}" y2="${my}"
+        stroke="#c43a3a" stroke-width="1" stroke-dasharray="3 2" opacity="0.85"/>
+      <text x="${(x1+x2)/2}" y="${my+4}" text-anchor="middle"
+        font-size="9" fill="#c43a3a">♥</text>`;
+    }
+  });
+
+  // ── Draw nodes ──────────────────────────────────────────
+  allM.forEach(m => {
+    const p = pos[m.id]; if (!p) return;
+    const mine   = isMine(m);
+    const isVirt = m.virtual;
+    const isMale = m.gender === 'male';
+    const isDead = !!m.death;
+
+    const bg     = isVirt ? (isMale?'#F4F6FD':'#FDF4F7') : mine?'#FDF6EC' : isMale?'#EEF3FC':'#FCF0F3';
+    const stroke = isVirt ? (isMale?'#7090C0':'#C07090') : mine?'#c8882a' : isMale?'#7090C0':'#C07090';
+    const tc     = isDead ? '#666' : isMale?'#2a4a8a':'#8a2a50';
+    const dash   = isVirt ? 'stroke-dasharray="5 3"' : '';
+    const op     = isVirt ? 'opacity="0.85"' : '';
+    const fn     = isVirt ? `promptAddSpouse('${m.name}','${m.spouseOf}')` : `openModal('${m.id}')`;
+
+    // Node box
+    h += `<g onclick="${fn}" style="cursor:pointer" ${op}>
+      <rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="4"
+        fill="${bg}" stroke="${stroke}" stroke-width="${mine?1.5:0.8}" ${dash}/>
+      ${mine?`<rect x="${p.x}" y="${p.y}" width="${NW}" height="2.5" rx="1.5" fill="#c8882a"/>`:
+             isDead?`<rect x="${p.x}" y="${p.y}" width="${NW}" height="2" rx="1" fill="#aaa"/>`:'' }`;
+
+    // 辈分标签（顶部小字）
+    const label = isVirt ? '配偶' : (m.gen ? m.gen.replace('第','').substring(0,3) : '');
+    if (label) {
+      h += `<text x="${p.x+NW/2}" y="${p.y+9}" text-anchor="middle"
+        font-size="7" fill="${mine?'#7a5010':'#6b5540'}"
+        font-family="Noto Sans SC,sans-serif">${label}</text>`;
+    }
+
+    // 姓名竖排（始终显示，不受照片影响）
+    const topOff = (mine?2.5:isDead?2:0) + (label ? 10 : 3);
+    const chars  = m.name.split('');
+    const charH  = 13, totalH = chars.length * charH;
+    const startY = p.y + topOff + Math.max(0, (NH - topOff - 10 - totalH) / 2) + charH;
+    if (isDead && !isVirt) {
+      h += `<text x="${p.x+NW/2}" y="${startY - charH + 2}" text-anchor="middle"
+        font-size="8" fill="#999">✝</text>`;
+    }
+    chars.forEach((ch, i) => {
+      h += `<text x="${p.x+NW/2}" y="${startY+i*charH}" text-anchor="middle"
+        font-size="13" font-weight="600" fill="${tc}"
+        font-family="Noto Serif SC,serif">${ch}</text>`;
+    });
+
+    h += '</g>';
+  });
+
+  svg.innerHTML = h;
+}
+
+function doZoom(f) {
+  treeScale = f === 1 ? 1 : Math.max(0.3, Math.min(3, treeScale * f));
+  const s = document.getElementById('tree-svg');
+  if (s) s.style.transform = `scale(${treeScale})`;
+}
+
+// ─── PHOTOS ───────────────────────────────────────────────
+async function doUploadPhotos(e) {
+  const files = Array.from(e.target.files);
+  for (const file of files) {
+    const dataUrl = await readFile(file);
+    const { data, error } = await db.from('photos').insert({
+      created_by: me.id, data_url: dataUrl,
+      file_name: file.name, assigned_to: ''
+    }).select().single();
+    if (error) { toast('❌ 上传失败：' + error.message, true); continue; }
+    photos.push({ id: data.id, by: me.id, url: dataUrl, name: file.name, to: '' });
+  }
+  renderPhotos(); updateStats();
+  toast('✓ 已上传 ' + files.length + ' 张照片');
+  e.target.value = '';
+}
+
+function readFile(file) {
+  return new Promise(res => {
+    const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(file);
+  });
+}
+
+async function doAssignPhoto(pid, name) {
+  const p = photos.find(x => x.id === pid); if (!p) return;
+  p.to = name;
+  await db.from('photos').update({ assigned_to: name }).eq('id', pid);
+  renderPhotos(); renderMembers();
+  toast('已关联：' + name);
+}
+
+async function doDeletePhoto(pid) {
+  await db.from('photos').delete().eq('id', pid);
+  photos = photos.filter(x => x.id !== pid);
+  renderPhotos(); renderMembers();
+  toast('照片已删除');
+}
+
+function doSortPhotos(mode) {
+  photoSort = mode;
+  renderPhotos();
+}
+
+// 解析辈分字段为可排序数字，支持多种格式：
+// "第五世" / "第5世" / "五世" / "5" / "仁字辈"（按首次出现顺序）
+function parseGenOrder(genStr) {
+  if (!genStr) return 9999;
+
+  // 1. 直接含阿拉伯数字：第5世、5世、第5
+  const arabic = genStr.match(/\d+/);
+  if (arabic) return parseInt(arabic[0]);
+
+  // 2. 汉字数字 → 整数（支持到九十九）
+  //    先从 genStr 里提取连续汉字数字片段
+  const cn = genStr.replace(/第|世|辈|代/g, '');  // 去掉修饰词，留纯数字汉字
+  const d = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9};
+
+  // 匹配模式：二十三 / 十五 / 二十 / 十 / 三 等
+  const m = cn.match(/^([一二三四五六七八九])?(十)([一二三四五六七八九])?$|^([一二三四五六七八九])$/);
+  if (m) {
+    if (m[4]) return d[m[4]];                            // 纯个位：三 → 3
+    const tens = m[1] ? d[m[1]] * 10 : 10;              // 二十 → 20，十 → 10
+    const ones = m[3] ? d[m[3]] : 0;                    // 十三 → +3
+    return tens + ones;
+  }
+
+  // 3. 非数字辈分（仁字辈等）：按在族员数据中首次出现顺序
+  const allGens = members.map(m => m.gen).filter(Boolean);
+  const idx = allGens.indexOf(genStr);
+  return idx >= 0 ? 500 + idx : 9999;
+}
+
+function getSortedPhotos() {
+  const arr = [...photos];
+  if (photoSort === 'gen') arr.sort((a, b) => {
+    const ma = allMembers().find(m => m.name === a.to);
+    const mb = allMembers().find(m => m.name === b.to);
+    const ga = parseGenOrder(ma?.gen), gb = parseGenOrder(mb?.gen);
+    if (ga !== gb) return ga - gb;
+    // 同辈再按出生年排
+    return (parseInt(ma?.birth) || 9999) - (parseInt(mb?.birth) || 9999);
+  });
+  else if (photoSort === 'birth') arr.sort((a, b) => {
+    const ma = allMembers().find(m => m.name === a.to);
+    const mb = allMembers().find(m => m.name === b.to);
+    return (parseInt(ma?.birth) || 9999) - (parseInt(mb?.birth) || 9999);
+  });
+  else arr.sort((a, b) => (a.to || a.name).localeCompare(b.to || b.name, 'zh'));
+  return arr;
+}
+
+function renderPhotos() {
+  const el = document.getElementById('photo-grid'); if (!el) return;
+  if (!photos.length) {
+    el.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🖼️</div><h3>尚无照片</h3><p>上传后按辈分自动排列</p></div>';
+    return;
+  }
+  const opts = ['<option value="">— 关联族员 —</option>',
+    ...allMembers().map(m => `<option value="${m.name}">${m.name}${m.virtual ? '（配偶）' : ''}</option>`)].join('');
+  el.innerHTML = getSortedPhotos().map(p => {
+    const mbr = allMembers().find(m => m.name === p.to);
+    const sel = opts.replace(`value="${p.to}"`, `value="${p.to}" selected`);
+    return `<div class="photo-item">
+      <img src="${p.url}" alt="${p.to || p.name}">
+      <div class="photo-overlay"><div class="photo-name">${p.to || p.name}</div>
+        ${mbr ? `<div style="font-size:9px;color:rgba(245,217,154,.7)">${mbr.gen || ''}</div>` : ''}</div>
+      <div class="assign-sel"><select onchange="doAssignPhoto('${p.id}',this.value)">${sel}</select></div>
+      <button class="photo-del" onclick="doDeletePhoto('${p.id}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ─── PREFACE ──────────────────────────────────────────────
+function previewPreface() {
+  const name = vv('pref-name'), year = vv('pref-year');
+  const anc  = vv('pref-anc'),  text = vv('pref-text');
+  const el = document.getElementById('pref-preview'); if (!el) return;
+  if (!name && !text) { el.textContent = '序言将在此显示…'; return; }
+  let html = '';
+  if (name) html += `<div style="text-align:center;font-size:17px;font-weight:700;letter-spacing:4px;margin-bottom:6px">${name}</div>`;
+  if (year) html += `<div style="text-align:center;font-size:11px;color:#6b5540;margin-bottom:14px;letter-spacing:2px">${year}续修</div>`;
+  if (anc)  html += `<div style="font-size:12px;color:#6b5540;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #ede0c8">始迁祖：${anc}</div>`;
+  if (text) html += `<div style="white-space:pre-wrap;font-size:13px;line-height:2.1;color:#3d2e1a">${text}</div>`;
+  el.innerHTML = html;
+  if (name) document.getElementById('app-title').textContent = name + '家谱';
+}
+
+function doGenPreface() {
+  const clanName = vv('pref-name') || (members[0]?.clan || '某氏');
+  const anc = members.find(m => !m.father) || members[0];
+  const draft = `盖闻水有源，树有根，人有祖。${clanName}自始祖${anc ? anc.name : '先祖'}公迁居以来，历经数代繁衍，枝叶茂盛，散布四海。\n\n谱以联族，族以谱传。今逢盛世，承蒙族人倾力相助，合力续修家谱，以志不忘本，以告慰先祖在天之灵。\n\n本谱共录族员${members.length}人，上溯始祖，下及当代，详载出生、迁徙、婚配、职业，力求翔实。凡我族人，无论身在何处，血脉同源，望珍视此谱，传之后世。\n\n${new Date().getFullYear()}年续修`;
+  document.getElementById('pref-text').value = draft;
+  previewPreface();
+  toast('草稿已生成，可自行修改');
+}
+
+async function doSavePreface() {
+  pref = { name: vv('pref-name'), year: vv('pref-year'), anc: vv('pref-anc'), text: vv('pref-text') };
+  const { error } = await db.from('preface').upsert({
+    id: '00000000-0000-0000-0000-000000000001',
+    clan_name: pref.name, year: pref.year, ancestor: pref.anc, text: pref.text,
+    updated_at: new Date()
+  });
+  if (error) { toast('❌ 保存失败：' + error.message, true); return; }
+  toast('✓ 序言已保存至云端');
+}
+
+// ─── PDF ──────────────────────────────────────────────────
+function doGenPDF() {
+  const clanName  = vv('pdf-clan') || pref.name || '丁氏家谱';
+  const edition   = vv('pdf-ed')  || new Date().getFullYear() + '年续修';
+  const inclPreface = document.getElementById('po-preface').classList.contains('on');
+  const inclList    = document.getElementById('po-list').classList.contains('on');
+  const inclPhotos  = document.getElementById('po-photos').classList.contains('on');
+
+  const sorted = [...members].sort((a,b)=>{
+    const ga=parseGenOrder(a.gen),gb=parseGenOrder(b.gen);
+    if(ga!==gb)return ga-gb;
+    return(parseInt(a.birth)||9999)-(parseInt(b.birth)||9999);
+  });
+  const byGen={};
+  sorted.forEach(m=>{const g=m.gen||'未记世代';if(!byGen[g])byGen[g]=[];byGen[g].push(m);});
+  // 确保世代按辈分顺序排列
+  const byGenSorted=Object.fromEntries(
+    Object.entries(byGen).sort((a,b)=>parseGenOrder(a[0])-parseGenOrder(b[0]))
+  );
+
+  function yearCN(y){
+    const s=String(y||'').match(/\d{4}/);
+    return s?s[0].split('').map(d=>'〇一二三四五六七八九'[d]).join('')+'年':(y||'');
+  }
+  function numCN(n){
+    const int=parseInt(n);if(isNaN(int)||int<=0)return'';
+    const d='〇一二三四五六七八九'.split(''),u=['','十','百','千'];
+    const s=String(int);let r='';
+    for(let i=0;i<s.length;i++){const dg=parseInt(s[i]),un=u[s.length-1-i];
+      if(dg===0){if(r&&r.slice(-1)!=='〇')r+='〇';}else r+=d[dg]+un;}
+    return r.replace(/^一十/,'十').replace(/〇$/,'');
+  }
+  function cn(text){
+    if(!text)return'';
+    return text.replace(/\d+/g,n=>{
+      const int=parseInt(n);
+      if(n.length===4&&int>=1000)return n.split('').map(d=>'〇一二三四五六七八九'[d]).join('');
+      if(isNaN(int)||int===0)return'〇';
+      const d='〇一二三四五六七八九'.split(''),u=['','十','百','千'];
+      const s=String(int);let r='';
+      for(let i=0;i<s.length;i++){const dg=parseInt(s[i]),un=u[s.length-1-i];
+        if(dg===0){if(r&&r.slice(-1)!=='〇')r+='〇';}else r+=d[dg]+un;}
+      return r.replace(/^一十/,'十').replace(/〇$/,'');
+    });
+  }
+  function info(m){
+    const dead=!!m.death;
+    const ls=(m.birth&&m.death)?(()=>{const b=parseInt(m.birth),d=parseInt(m.death);
+      return(!isNaN(b)&&!isNaN(d))?'享年'+numCN(d-b)+'岁':''})():'';
+    const p=[];
+    if(m.style)      p.push('字'+m.style);
+    if(m.birthDate)  p.push('生于'+m.birthDate);
+    else if(m.birth) p.push('生于'+yearCN(m.birth));
+    if(m.death){
+      if(m.deathDate)p.push('卒于'+m.deathDate);
+      else            p.push('卒于'+yearCN(m.death));
+      if(ls)p.push(ls);
+    }
+    if(m.father) p.push('父'+m.father);
+    if(m.mother) p.push('母'+m.mother);
+    if(m.spouse) p.push('配'+m.spouse);
+    if(m.hometown)p.push('籍'+m.hometown.replace(/\s+/g,'').replace(/省|自治区/g,'').substring(0,8));
+    if(m.location&&!dead)p.push('居'+m.location.replace(/\s+/g,'').replace(/省|自治区/g,'').substring(0,8));
+    if(m.job)    p.push('业'+m.job.substring(0,10));
+    if(m.clan)   p.push(m.clan);
+    if(m.notes)  p.push(cn(m.notes));
+    return p.join('　');
+  }
+
+  const css=`
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Noto Serif SC',serif;font-size:12pt;background:#fff;color:#1a1209}
+@page{size:letter portrait;margin:0.5in 0.4in}
+@media print{
+  html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .pb{page-break-before:always}
+  .nob{page-break-inside:avoid}
+  .cover{page-break-after:always}
+}
+/* Cover: use print-specific sizing */
+.cover{
+  width:calc(100% + 0.8in);margin-left:-0.4in;margin-right:-0.4in;
+  margin-top:-0.5in;
+  height:calc(100vh + 0.5in);
+  background:linear-gradient(160deg,#1a0e05,#2c1a08 50%,#3d2410);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:60px;position:relative;
+}
+.cover::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background-image:
+    repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(200,136,42,.04) 40px,rgba(200,136,42,.04) 41px),
+    repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(200,136,42,.04) 40px,rgba(200,136,42,.04) 41px)}
+.seal{width:68pt;height:68pt;border-radius:50%;border:2pt solid #c8882a;
+  display:flex;align-items:center;justify-content:center;margin:0 auto 18pt;position:relative;z-index:1}
+.seal::before{content:'';position:absolute;inset:4pt;border:1pt solid rgba(200,136,42,.4);border-radius:50%}
+.seal-ch{font-size:26pt;color:#f5d99a;font-weight:700;position:relative;z-index:1}
+.cover h1{font-size:28pt;color:#f5d99a;letter-spacing:10pt;font-weight:700;margin-bottom:6pt;position:relative;z-index:1}
+.cover-ed{font-size:10pt;color:rgba(200,136,42,.7);letter-spacing:4pt;margin-bottom:24pt;position:relative;z-index:1}
+.cover-rule{width:46pt;height:0.5pt;background:rgba(200,136,42,.4);margin:0 auto 20pt;position:relative;z-index:1}
+.cover-meta{font-size:8.5pt;color:rgba(245,217,154,.4);letter-spacing:3pt;line-height:2.4;position:relative;z-index:1}
+.cover-stats{display:flex;gap:28pt;justify-content:center;margin-top:24pt;position:relative;z-index:1}
+.cs-num{font-size:20pt;color:#e6b060;font-weight:700}
+.cs-lbl{font-size:7pt;color:rgba(200,136,42,.6);letter-spacing:2pt;margin-top:2pt}
+/* Section header */
+.sec-head{text-align:center;margin-bottom:10pt}
+.sec-title{font-size:14pt;letter-spacing:6pt;color:#2c1a08;font-weight:700;margin-bottom:2pt}
+.sec-sub{font-size:8pt;color:#6b5540;letter-spacing:2pt}
+.sec-rule{display:flex;align-items:center;gap:6pt;margin:10pt 0 12pt}
+.sec-rule::before,.sec-rule::after{content:'';flex:1;height:0.4pt;background:linear-gradient(90deg,transparent,#c8882a,transparent)}
+.sec-rule span{font-size:9pt;color:#c8882a}
+.preface{font-size:12pt;line-height:2.4;color:#3d2e1a;text-align:justify;
+  text-indent:2em;white-space:pre-wrap;max-width:5.5in;margin:0 auto}
+.pref-anc{font-size:10pt;color:#6b5540;text-align:center;margin-bottom:14pt;
+  padding:6pt 12pt;border-top:0.5pt solid #ede0c8;border-bottom:0.5pt solid #ede0c8}
+.ftr{text-align:center;font-size:7pt;color:#6b5540;
+  margin-top:18pt;padding-top:6pt;border-top:0.4pt solid #ede0c8;letter-spacing:2pt}
+/* Genealogy table — 每一世一行，所有人横向并排，名字和简介均为竖排文字 */
+table.gt{
+  width:100%;border-collapse:collapse;
+  border:1pt solid #c8882a;
+  margin-bottom:6pt;
+  table-layout:fixed;
+  page-break-inside:avoid;
+}
+table.gt td{
+  border:0.5pt solid #d4b896;
+  padding:0;
+  vertical-align:top;
+}
+/* Generation label cell */
+.gc{
+  width:22pt;
+  background:linear-gradient(180deg,#2c1a08,#3d2410);
+  border-right:1.5pt solid #c8882a !important;
+  text-align:center;
+  vertical-align:middle;
+}
+/* Name cell — narrow, vertical name text */
+.nc{
+  width:22pt;
+  border-right:0.5pt solid #d4b896 !important;
+  background:#fff;
+  text-align:center;
+  vertical-align:top;
+}
+.nc.dead{background:#f7f5f2}
+.nc.mine{border-left:1.5pt solid #c8882a !important}
+/* Info cell — vertical info text */
+.ic{background:#fff;vertical-align:top}
+.ic.dead{background:#f7f5f2}
+/* Bold separator between members (right border of each member's info cell) */
+.ic.sep{border-right:1.5pt solid #c4a070 !important}
+/* Vertical text */
+.vt{
+  display:block;
+  writing-mode:vertical-rl;
+  text-orientation:upright;
+  font-family:'Noto Serif SC',serif;
+  line-height:1.5;
+  padding:5pt 3pt;
+  overflow:hidden;
+  white-space:normal;
+  word-break:break-all;
+  width:100%;
+}
+.vt-name{font-size:13pt;font-weight:700;letter-spacing:3pt}
+.vt-cross{font-size:8pt;color:#999;display:block;text-align:center;margin-bottom:2pt}
+.vt-info{font-size:10pt;color:#3d2e1a;letter-spacing:0.5pt}
+.vt-info.dead{color:#666}
+/* Photos */
+.pg{display:grid;grid-template-columns:repeat(5,1fr);gap:10pt;margin-top:10pt}
+.pi{text-align:center}
+.pi img{width:100%;aspect-ratio:1;object-fit:cover;border:0.5pt solid #d4b896;display:block}
+.pi-name{font-size:9pt;margin-top:3pt;font-weight:700;color:#3d2e1a}
+.pi-info{font-size:7.5pt;color:#6b5540;margin-top:1pt}
+`;
+
+  // Cover
+  let html=`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<title>${clanName}</title><style>${css}</style></head><body>
+<div class="cover">
+  <div class="seal"><div class="seal-ch">丁</div></div>
+  <h1>${clanName}</h1>
+  <div class="cover-ed">${edition}</div>
+  <div class="cover-rule"></div>
+  <div class="cover-meta">丁氏一脉 · 血脉相承 · 薪火相传</div>
+  <div class="cover-stats">
+    <div><div class="cs-num">${members.length}</div><div class="cs-lbl">族　员</div></div>
+    <div><div class="cs-num">${Object.keys(byGenSorted).length}</div><div class="cs-lbl">世　代</div></div>
+    <div><div class="cs-num">${members.filter(m=>m.death).length}</div><div class="cs-lbl">已　故</div></div>
+  </div>
+</div>`;
+
+  // Preface
+  if(inclPreface&&pref.text){
+    html+=`<div class="pb">
+  <div class="sec-head"><div class="sec-title">谱　　序</div>
+  ${pref.name?`<div class="sec-sub">${pref.name}</div>`:''}</div>
+  <div class="sec-rule"><span>◆</span></div>
+  ${pref.anc?`<div class="pref-anc">始迁祖：${pref.anc}</div>`:''}
+  <div class="preface">${pref.text}</div>
+  <div class="ftr">${clanName} · ${edition}</div>
+</div>`;
+  }
+
+  // Genealogy — one table per generation
+  // Each table has exactly ONE row: [gen-label | member1 | member2 | ...]
+  // With table-layout:fixed + overflow:hidden, content never escapes
+  if(inclList){
+    html+=`<div class="pb">
+  <div class="sec-head">
+    <div class="sec-title">世　系　名　录</div>
+    <div class="sec-sub">按世代排列 · 共 ${members.length} 人</div>
+  </div>
+  <div class="sec-rule"><span>◆</span></div>`;
+
+    Object.entries(byGenSorted).forEach(([gen,mlist])=>{
+      // ── 同一世所有人横排，名字和简介均为竖排文字 ──
+      // 结构：[世代标签竖排] | [姓名竖排][简介竖排] | [姓名竖排][简介竖排] | ...
+      // 每人占两列（姓名列22pt + 简介列按内容分配），成员间用较粗竖线分隔
+      const PAGE_PT = 672;
+      const GEN_PT  = 22;
+      const NAME_PT = 22;
+      const availPt = PAGE_PT - GEN_PT;
+
+      // 每人最少需要NAME_PT + 30pt简介列 = 52pt，页面最多放几人
+      const MIN_INFO_PT = 30;
+      const perRow = Math.max(1, Math.floor(availPt / (NAME_PT + MIN_INFO_PT)));
+
+      // 按perRow分块，人太多时换下一张表（标注"续"）
+      const chunks = [];
+      for(let i=0;i<mlist.length;i+=perRow) chunks.push(mlist.slice(i,i+perRow));
+
+      chunks.forEach((chunk, ci)=>{
+        // 简介列宽按内容长度比例分配
+        const infoLens = chunk.map(m => Math.max(10, info(m).length));
+        const totalLen = infoLens.reduce((a,b)=>a+b, 0);
+        const infoAvail = availPt - NAME_PT * chunk.length;
+        const infoWidths = infoLens.map(l =>
+          Math.max(MIN_INFO_PT, Math.round(infoAvail * l / totalLen))
+        );
+
+        // colgroup
+        html+=`<table class="gt"><colgroup><col style="width:${GEN_PT}pt">`;
+        chunk.forEach((_,i)=>{
+          html+=`<col style="width:${NAME_PT}pt"><col style="width:${infoWidths[i]}pt">`;
+        });
+        html+=`</colgroup><tbody><tr>`;
+
+        // 世代标签列
+        const genLabel = ci===0 ? gen : gen+'（续）';
+        html+=`<td class="gc"><span class="vt" style="font-size:10pt;font-weight:700;color:#f5d99a;letter-spacing:4pt">${genLabel}</span></td>`;
+
+        // 每个成员：姓名列 + 简介列，简介列右边加粗分隔线
+        chunk.forEach((m,i)=>{
+          const dead=!!m.death;
+          const mine=isMine(m);
+          const txt=info(m);
+          const nameColor=dead?'color:#666':'';
+          const deadCls=dead?' dead':'';
+          const mineCls=mine?' mine':'';
+          const isLast=(i===chunk.length-1);
+          html+=`<td class="nc${deadCls}${mineCls}">
+            <span class="vt vt-name" style="${nameColor}">
+              ${dead?'<span class="vt-cross">✝</span>':''}${m.name}
+            </span>
+          </td>
+          <td class="ic${deadCls}${isLast?'':' sep'}" style="width:${infoWidths[i]}pt">
+            <span class="vt vt-info${deadCls}">${txt}</span>
+          </td>`;
+        });
+
+        html+=`</tr></tbody></table>`;
+      });
+    });
+
+    html+=`<div class="ftr">${clanName} · ${edition}</div></div>`;
+  }
+
+  // Photos — 最后一页，按辈分排序
+  if(inclPhotos&&photos.length){
+    // 按辈分排序（用 parseGenOrder 支持汉字辈分），同辈再按出生年
+    const ap=[...photos].filter(p=>p.to).sort((a,b)=>{
+      const ma=allMembers().find(m=>m.name===a.to);
+      const mb=allMembers().find(m=>m.name===b.to);
+      const ga=parseGenOrder(ma?.gen), gb=parseGenOrder(mb?.gen);
+      if(ga!==gb)return ga-gb;
+      return (parseInt(ma?.birth)||9999)-(parseInt(mb?.birth)||9999);
+    });
+    if(ap.length){
+      html+=`<div class="pb">
+  <div class="sec-head">
+    <div class="sec-title">族　员　影　像</div>
+    <div class="sec-sub">按辈分排列 · 共 ${ap.length} 人</div>
+  </div>
+  <div class="sec-rule"><span>◆</span></div>
+  <div class="pg">`;
+      ap.forEach(p=>{
+        const mbr=allMembers().find(m=>m.name===p.to);
+        html+=`<div class="pi">
+    <img src="${p.url}" alt="${p.to}">
+    <div class="pi-name">${p.to}${mbr?.death?' ✝':''}</div>
+    ${mbr?.gen?`<div class="pi-info">${mbr.gen}</div>`:''}
+    ${mbr?.birth?`<div class="pi-info">${mbr.birth}${mbr?.death?' — '+mbr.death:''}</div>`:''}
+  </div>`;
+      });
+      html+=`</div><div class="ftr">${clanName} · ${edition}</div></div>`;
+    }
+  }
+
+  html+='</body></html>';
+  const w=window.open('','_blank','width=950,height=850');
+  w.document.write(html);w.document.close();
+  w.onload=()=>setTimeout(()=>w.print(),1200);
+  document.getElementById('pdf-msg').textContent='✓ 打印窗口已打开，请选择「存储为PDF」';
+  toast('✓ PDF已生成');
+}
+
+function openModal(id) {
+  const m = members.find(x => x.id === id); if (!m) return;
+  const mine = isMine(m);
+  const ph = photos.find(p => p.to === m.name);
+  const lifespanStr = (m.birth && m.death)
+    ? (() => { const b=parseInt(m.birth), d=parseInt(m.death); return (!isNaN(b)&&!isNaN(d)) ? `${d-b}岁` : ''; })()
+    : '';
+  const fields = [
+    ['性别', m.gender==='male'?'男':'女'],
+    ['出生年份', m.birth],
+    ['出生月份', m.birthDate],
+    ['去世年份', m.death],
+    ['去世月份', m.deathDate],
+    ['享年', lifespanStr],
+    ['祖籍', m.hometown],
+    ['现居地', m.location],
+    ['父亲', m.father],
+    ['母亲', m.mother],
+    ['配偶', m.spouse],
+    ['辈分', m.gen],
+    ['堂号', m.clan],
+    ['职业', m.job],
+  ].filter(([,v])=>v);
+  const isDead = !!m.death;
+  document.getElementById('modal-title').textContent = (isDead ? '✝ ' : '') + m.name + (m.style ? ' · ' + m.style : '');
+  document.getElementById('modal-body').innerHTML =
+    (ph ? `<div style="text-align:center;margin-bottom:14px"><img src="${ph.url}"
+      style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid #c8882a"></div>` : '') +
+    `<table style="width:100%;font-size:12px;border-collapse:collapse">
+      ${fields.map(([k,v])=>`<tr><td style="padding:5px 0;color:#6b5540;width:55px;font-size:11px">${k}</td>
+        <td style="padding:5px 0;font-weight:600;color:#1a1209">${v}</td></tr>`).join('')}
+    </table>` +
+    (m.notes ? `<div style="margin-top:10px;padding:10px;background:#f7efe0;border-radius:7px;
+      border:1px solid #ede0c8;font-size:12px;color:#6b5540;line-height:1.8">${m.notes}</div>` : '') +
+    (m.byEmail ? `<div style="margin-top:8px;font-size:10px;color:#6b5540">录入者：${m.byEmail}</div>` : '') +
+    `<div style="display:flex;gap:8px;margin-top:14px">
+      ${mine
+        ? `<button class="btn btn-primary" onclick="doEditMember('${m.id}')" style="font-size:12px">✏️ 修改</button>
+           <button class="btn btn-danger" onclick="doDeleteMember('${m.id}')" style="font-size:12px">删除</button>`
+        : `<div style="font-size:11px;color:#6b5540;padding:6px 0">此记录由他人录入，如需修改请联系：${m.byEmail||'管理员'}</div>`}
+    </div>`;
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+
+// ─── TEST ─────────────────────────────────────────────────
+async function doTestConn() {
+  if (!db) { toast('❌ 数据库未初始化', true); return; }
+  toast('检测中…');
+  const { data, error } = await db.from('members').select('id').limit(1);
+  if (error) {
+    if (error.code === '42P01') toast('❌ 表不存在，请运行 init-clean.sql', true);
+    else toast('❌ ' + error.message, true);
+    return;
+  }
+  const { data: { user } } = await db.auth.getUser();
+  toast('✅ 连接正常，登录为：' + (user?.email || '未知'));
+}
+
+// ─── MAP ──────────────────────────────────────────────────
+let mapInstance = null;
+let mapInitialized = false;
+
+// Built-in geocode dictionary for common Chinese cities/provinces
+// Format: 'search term' → [lat, lng]
+const GEO_DICT = {
+  '北京市':[39.905,116.391],'北京':[39.905,116.391],
+  '朝阳':[39.921,116.447],'海淀区':[39.960,116.298],'丰台区':[39.863,116.287],
+  '通州区':[39.902,116.657],'顺义区':[40.130,116.655],'昌平区':[40.220,116.231],
+  '上海市':[31.230,121.473],'上海':[31.230,121.473],
+  '浦东新区':[31.221,121.544],'浦东':[31.221,121.544],
+  '徐汇区':[31.188,121.436],'长宁区':[31.220,121.425],
+  '闵行区':[31.112,121.381],'嘉定区':[31.375,121.265],
+  '松江区':[31.032,121.228],'青浦区':[31.150,121.124],
+  '天津市':[39.125,117.190],'天津':[39.125,117.190],
+  '滨海新区':[39.019,117.698],
+  '重庆市':[29.563,106.551],'重庆':[29.563,106.551],
+  '渝中区':[29.563,106.551],'江北区':[29.606,106.532],
+  '沙坪坝区':[29.541,106.454],'九龙坡区':[29.520,106.480],
+  '渝北区':[29.718,106.632],'巴南区':[29.402,106.540],
+  '涪陵区':[29.703,107.389],'万州区':[30.807,108.408],
+  '广东省':[23.130,113.264],'广东':[23.130,113.264],
+  '广州市':[23.130,113.264],'广州':[23.130,113.264],
+  '天河区':[23.122,113.361],'越秀区':[23.128,113.271],
+  '海珠区':[23.083,113.318],'白云区':[23.157,113.271],
+  '黄埔区':[23.103,113.456],'番禺区':[22.937,113.384],
+  '花都区':[23.404,113.220],'南沙区':[22.802,113.523],
+  '增城区':[23.261,113.811],'从化区':[23.549,113.588],
+  '深圳市':[22.543,114.058],'深圳':[22.543,114.058],
+  '福田区':[22.522,114.055],'罗湖区':[22.548,114.131],
+  '南山区':[22.528,113.930],'盐田区':[22.557,114.236],
+  '宝安区':[22.555,113.883],'龙岗区':[22.720,114.247],
+  '龙华区':[22.637,114.037],'坪山区':[22.690,114.354],
+  '光明区':[22.748,113.934],
+  '东莞市':[23.020,113.751],'东莞':[23.020,113.751],
+  '佛山市':[23.021,113.122],'佛山':[23.021,113.122],
+  '珠海市':[22.270,113.577],'珠海':[22.270,113.577],
+  '中山市':[22.516,113.393],'中山':[22.516,113.393],
+  '惠州市':[23.111,114.416],'惠州':[23.111,114.416],
+  '江门市':[22.579,113.082],'江门':[22.579,113.082],
+  '肇庆市':[23.047,112.465],'肇庆':[23.047,112.465],
+  '汕头市':[23.354,116.682],'汕头':[23.354,116.682],
+  '湛江市':[21.271,110.359],'湛江':[21.271,110.359],
+  '茂名市':[21.663,110.925],'茂名':[21.663,110.925],
+  '韶关市':[24.801,113.597],'韶关':[24.801,113.597],
+  '河源市':[23.743,114.700],'河源':[23.743,114.700],
+  '梅州市':[24.289,116.123],'梅州':[24.289,116.123],
+  '汕尾市':[22.779,115.375],'汕尾':[22.779,115.375],
+  '阳江市':[21.858,111.983],'阳江':[21.858,111.983],
+  '清远市':[23.685,113.056],'清远':[23.685,113.056],
+  '潮州市':[23.657,116.623],'潮州':[23.657,116.623],
+  '揭州市':[23.550,116.373],'揭州':[23.550,116.373],
+  '浙江省':[30.274,120.155],'浙江':[30.274,120.155],
+  '杭州市':[30.274,120.155],'杭州':[30.274,120.155],
+  '萧山区':[30.163,120.269],'余杭区':[30.417,120.298],
+  '西湖区':[30.259,120.130],'滨江区':[30.208,120.212],
+  '宁波市':[29.868,121.544],'宁波':[29.868,121.544],
+  '温州市':[28.000,120.672],'温州':[28.000,120.672],
+  '嘉兴市':[30.752,120.755],'嘉兴':[30.752,120.755],
+  '湖州市':[30.894,120.086],'湖州':[30.894,120.086],
+  '绍兴市':[30.003,120.580],'绍兴':[30.003,120.580],
+  '金华市':[29.079,119.647],'金华':[29.079,119.647],
+  '台州市':[28.656,121.421],'台州':[28.656,121.421],
+  '舟山市':[30.016,122.207],'舟山':[30.016,122.207],
+  '丽水市':[28.468,119.923],'丽水':[28.468,119.923],
+  '衢州市':[28.935,118.874],'衢州':[28.935,118.874],
+  '江苏省':[32.061,118.796],'江苏':[32.061,118.796],
+  '南京市':[32.061,118.796],'南京':[32.061,118.796],
+  '玄武区':[32.048,118.798],'秦淮区':[32.040,118.791],
+  '建邺区':[32.003,118.731],'鼓楼区':[32.070,118.772],
+  '浦口区':[32.059,118.627],'栖霞区':[32.096,118.909],
+  '雨花台区':[31.991,118.779],'江宁区':[31.952,118.840],
+  '苏州市':[31.298,120.585],'苏州':[31.298,120.585],
+  '姑苏区':[31.336,120.617],'吴中区':[31.263,120.632],
+  '相城区':[31.369,120.643],'吴江区':[31.138,120.645],
+  '昆山市':[31.385,120.981],'常熟市':[31.644,120.752],
+  '张家港市':[31.875,120.555],'太仓市':[31.457,121.101],
+  '无锡市':[31.570,120.300],'无锡':[31.570,120.300],
+  '常州市':[31.772,119.974],'常州':[31.772,119.974],
+  '镇江市':[32.188,119.425],'镇江':[32.188,119.425],
+  '扬州市':[32.394,119.414],'扬州':[32.394,119.414],
+  '南通市':[31.981,120.895],'南通':[31.981,120.895],
+  '盐城市':[33.349,120.163],'盐城':[33.349,120.163],
+  '淮安市':[33.551,119.021],'淮安':[33.551,119.021],
+  '连云港市':[34.597,119.222],'连云港':[34.597,119.222],
+  '宿迁市':[33.963,118.275],'宿迁':[33.963,118.275],
+  '徐州市':[34.261,117.186],'徐州':[34.261,117.186],
+  '泰州市':[32.457,119.923],'泰州':[32.457,119.923],
+  '湖南省':[28.228,112.939],'湖南':[28.228,112.939],
+  '长沙市':[28.228,112.939],'长沙':[28.228,112.939],
+  '岳麓区':[28.235,112.932],'芙蓉区':[28.199,113.022],
+  '天心区':[28.112,112.982],'开福区':[28.256,112.986],
+  '雨花区':[28.135,113.038],'望城区':[28.354,112.820],
+  '长沙县':[28.246,113.079],'浏阳市':[28.163,113.643],
+  '宁乡市':[28.276,112.552],
+  '株洲市':[27.830,113.134],'株洲':[27.830,113.134],
+  '湘潭市':[27.853,112.944],'湘潭':[27.853,112.944],
+  '衡阳市':[26.894,112.572],'衡阳':[26.894,112.572],
+  '邵阳市':[27.239,111.468],'邵阳':[27.239,111.468],
+  '岳阳市':[29.357,113.129],'岳阳':[29.357,113.129],
+  '常德市':[29.032,111.699],'常德':[29.032,111.699],
+  '张家界市':[29.117,110.479],'张家界':[29.117,110.479],
+  '益阳市':[28.554,112.355],'益阳':[28.554,112.355],
+  '郴州市':[25.770,113.014],'郴州':[25.770,113.014],
+  '永州市':[26.420,111.613],'永州':[26.420,111.613],
+  '怀化市':[27.550,110.001],'怀化':[27.550,110.001],
+  '娄底市':[27.700,111.994],'娄底':[27.700,111.994],
+  '湖北省':[30.593,114.305],'湖北':[30.593,114.305],
+  '武汉市':[30.593,114.305],'武汉':[30.593,114.305],
+  '江岸区':[30.599,114.311],'江汉区':[30.578,114.271],
+  '硚口区':[30.580,114.216],'汉阳区':[30.554,114.216],
+  '武昌区':[30.554,114.316],'青山区':[30.639,114.389],
+  '洪山区':[30.500,114.344],'东西湖区':[30.620,114.137],
+  '蔡甸区':[30.582,113.948],'江夏区':[30.375,114.319],
+  '黄陂区':[30.883,114.375],'新洲区':[30.841,114.802],
+  '宜昌市':[30.692,111.286],'宜昌':[30.692,111.286],
+  '黄石市':[30.220,115.038],'黄石':[30.220,115.038],
+  '十堰市':[32.629,110.800],'十堰':[32.629,110.800],
+  '荆州市':[30.352,112.239],'荆州':[30.352,112.239],
+  '孝感市':[30.924,113.916],'孝感':[30.924,113.916],
+  '黄冈市':[30.447,114.872],'黄冈':[30.447,114.872],
+  '咸宁市':[29.841,114.322],'咸宁':[29.841,114.322],
+  '四川省':[30.659,104.065],'四川':[30.659,104.065],
+  '成都市':[30.659,104.065],'成都':[30.659,104.065],
+  '锦江区':[30.657,104.081],'青羊区':[30.674,104.061],
+  '金牛区':[30.691,104.052],'武侯区':[30.641,104.061],
+  '成华区':[30.659,104.101],'龙泉驿区':[30.556,104.274],
+  '青白江区':[30.876,104.251],'新都区':[30.823,104.159],
+  '温江区':[30.683,103.857],'双流区':[30.574,103.923],
+  '郫都区':[30.796,103.887],'都江堰市':[30.988,103.647],
+  '绵阳市':[31.468,104.679],'绵阳':[31.468,104.679],
+  '德阳市':[31.127,104.397],'德阳':[31.127,104.397],
+  '宜宾市':[28.752,104.643],'宜宾':[28.752,104.643],
+  '南充市':[30.795,106.082],'南充':[30.795,106.082],
+  '泸州市':[28.872,105.443],'泸州':[28.872,105.443],
+  '乐山市':[29.552,103.767],'乐山':[29.552,103.767],
+  '自贡市':[29.339,104.778],'自贡':[29.339,104.778],
+  '山东省':[36.668,117.020],'山东':[36.668,117.020],
+  '济南市':[36.668,117.020],'济南':[36.668,117.020],
+  '历下区':[36.668,117.086],'市中区':[36.651,116.983],
+  '槐荫区':[36.651,116.901],'天桥区':[36.714,116.987],
+  '历城区':[36.679,117.065],'章丘区':[36.685,117.527],
+  '青岛市':[36.066,120.383],'青岛':[36.066,120.383],
+  '市南区':[36.066,120.383],'市北区':[36.087,120.355],
+  '黄岛区':[35.960,120.198],'崂山区':[36.108,120.469],
+  '城阳区':[36.307,120.396],'即墨区':[36.389,120.447],
+  '胶州市':[36.265,119.942],'平度市':[36.777,119.959],
+  '烟台市':[37.463,121.448],'烟台':[37.463,121.448],
+  '潍坊市':[36.707,119.162],'潍坊':[36.707,119.162],
+  '淄博市':[36.813,118.055],'淄博':[36.813,118.055],
+  '临沂市':[35.105,118.356],'临沂':[35.105,118.356],
+  '枣庄市':[34.810,117.557],'枣庄':[34.810,117.557],
+  '威海市':[37.513,122.122],'威海':[37.513,122.122],
+  '日照市':[35.417,119.527],'日照':[35.417,119.527],
+  '泰安市':[36.185,117.088],'泰安':[36.185,117.088],
+  '福建省':[26.100,119.296],'福建':[26.100,119.296],
+  '福州市':[26.100,119.296],'福州':[26.100,119.296],
+  '台江区':[26.051,119.314],'仓山区':[26.047,119.277],
+  '马尾区':[25.989,119.455],'晋安区':[26.082,119.328],
+  '长乐区':[25.963,119.523],'福清市':[25.721,119.385],
+  '厦门市':[24.479,118.090],'厦门':[24.479,118.090],
+  '思明区':[24.446,118.080],'海沧区':[24.484,117.906],
+  '湖里区':[24.513,118.147],'集美区':[24.575,118.097],
+  '同安区':[24.723,118.153],'翔安区':[24.618,118.248],
+  '泉州市':[24.875,118.676],'泉州':[24.875,118.676],
+  '莆田市':[25.454,119.007],'莆田':[25.454,119.007],
+  '漳州市':[24.513,117.647],'漳州':[24.513,117.647],
+  '龙岩市':[25.075,117.017],'龙岩':[25.075,117.017],
+  '宁德市':[26.665,119.523],'宁德':[26.665,119.523],
+  '安徽省':[31.820,117.228],'安徽':[31.820,117.228],
+  '合肥市':[31.820,117.228],'合肥':[31.820,117.228],
+  '瑶海区':[31.857,117.309],'庐阳区':[31.878,117.264],
+  '蜀山区':[31.851,117.261],'包河区':[31.793,117.309],
+  '芜湖市':[31.352,118.433],'芜湖':[31.352,118.433],
+  '蚌埠市':[32.917,117.389],'蚌埠':[32.917,117.389],
+  '淮南市':[32.626,116.999],'淮南':[32.626,116.999],
+  '马鞍山市':[31.670,118.507],'马鞍山':[31.670,118.507],
+  '安庆市':[30.543,117.044],'安庆':[30.543,117.044],
+  '黄山市':[29.714,118.338],'黄山':[29.714,118.338],
+  '河南省':[34.765,113.754],'河南':[34.765,113.754],
+  '郑州市':[34.765,113.754],'郑州':[34.765,113.754],
+  '中原区':[34.748,113.614],'金水区':[34.800,113.668],
+  '惠济区':[34.867,113.621],'管城区':[34.754,113.681],
+  '开封市':[34.797,114.307],'开封':[34.797,114.307],
+  '洛阳市':[34.619,112.454],'洛阳':[34.619,112.454],
+  '平顶山市':[33.766,113.192],'平顶山':[33.766,113.192],
+  '安阳市':[36.097,114.392],'安阳':[36.097,114.392],
+  '新乡市':[35.302,113.921],'新乡':[35.302,113.921],
+  '南阳市':[32.999,112.529],'南阳':[32.999,112.529],
+  '信阳市':[32.147,114.091],'信阳':[32.147,114.091],
+  '陕西省':[34.263,108.948],'陕西':[34.263,108.948],
+  '西安市':[34.263,108.948],'西安':[34.263,108.948],
+  '新城区':[34.275,108.960],'碑林区':[34.258,108.952],
+  '莲湖区':[34.265,108.930],'灞桥区':[34.272,109.065],
+  '未央区':[34.293,108.947],'雁塔区':[34.220,108.948],
+  '临潼区':[34.367,109.214],'长安区':[34.158,108.940],
+  '宝鸡市':[34.361,107.237],'宝鸡':[34.361,107.237],
+  '咸阳市':[34.329,108.710],'咸阳':[34.329,108.710],
+  '延安市':[36.585,109.490],'延安':[36.585,109.490],
+  '汉中市':[33.077,107.028],'汉中':[33.077,107.028],
+  '榆林市':[38.285,109.741],'榆林':[38.285,109.741],
+  '河北省':[38.045,114.502],'河北':[38.045,114.502],
+  '石家庄市':[38.045,114.502],'石家庄':[38.045,114.502],
+  '唐山市':[39.631,118.180],'唐山':[39.631,118.180],
+  '秦皇岛市':[39.935,119.599],'秦皇岛':[39.935,119.599],
+  '邯郸市':[36.625,114.539],'邯郸':[36.625,114.539],
+  '保定市':[38.874,115.465],'保定':[38.874,115.465],
+  '廊坊市':[39.538,116.683],'廊坊':[39.538,116.683],
+  '辽宁省':[41.795,123.430],'辽宁':[41.795,123.430],
+  '沈阳市':[41.795,123.430],'沈阳':[41.795,123.430],
+  '大连市':[38.914,121.614],'大连':[38.914,121.614],
+  '中山区':[38.918,121.638],'西岗区':[38.914,121.602],
+  '沙河口区':[38.904,121.594],'甘井子区':[38.953,121.524],
+  '旅顺口区':[38.852,121.261],'金州区':[39.050,121.782],
+  '鞍山市':[41.107,122.995],'鞍山':[41.107,122.995],
+  '抚顺市':[41.880,123.957],'抚顺':[41.880,123.957],
+  '丹东市':[40.129,124.395],'丹东':[40.129,124.395],
+  '锦州市':[41.095,121.126],'锦州':[41.095,121.126],
+  '营口市':[40.668,122.235],'营口':[40.668,122.235],
+  '吉林省':[43.887,125.325],
+  '长春市':[43.887,125.325],'长春':[43.887,125.325],
+  '吉林市':[43.843,126.550],
+  '黑龙江省':[45.756,126.642],'黑龙江':[45.756,126.642],
+  '哈尔滨市':[45.756,126.642],'哈尔滨':[45.756,126.642],
+  '齐齐哈尔市':[47.354,123.918],'齐齐哈尔':[47.354,123.918],
+  '牡丹江市':[44.552,129.633],'牡丹江':[44.552,129.633],
+  '佳木斯市':[46.800,130.361],'佳木斯':[46.800,130.361],
+  '大庆市':[46.590,125.103],'大庆':[46.590,125.103],
+  '山西省':[37.873,112.549],'山西':[37.873,112.549],
+  '太原市':[37.873,112.549],'太原':[37.873,112.549],
+  '大同市':[40.076,113.300],'大同':[40.076,113.300],
+  '临汾市':[36.088,111.519],'临汾':[36.088,111.519],
+  '运城市':[35.023,111.004],'运城':[35.023,111.004],
+  '内蒙古自治区':[40.818,111.766],'内蒙古':[40.818,111.766],
+  '呼和浩特市':[40.818,111.766],'呼和浩特':[40.818,111.766],
+  '包头市':[40.655,109.840],'包头':[40.655,109.840],
+  '鄂尔多斯市':[39.609,109.781],'鄂尔多斯':[39.609,109.781],
+  '云南省':[24.880,102.832],'云南':[24.880,102.832],
+  '昆明市':[24.880,102.832],'昆明':[24.880,102.832],
+  '曲靖市':[25.490,103.796],'曲靖':[25.490,103.796],
+  '玉溪市':[24.352,102.546],'玉溪':[24.352,102.546],
+  '大理州':[25.589,100.225],'丽江市':[26.872,100.227],'丽江':[26.872,100.227],
+  '西双版纳州':[21.916,100.797],
+  '贵州省':[26.599,106.707],'贵州':[26.599,106.707],
+  '贵阳市':[26.599,106.707],'贵阳':[26.599,106.707],
+  '遵义市':[27.725,106.927],'遵义':[27.725,106.927],
+  '广西壮族自治区':[22.817,108.366],'广西':[22.817,108.366],
+  '南宁市':[22.817,108.366],'南宁':[22.817,108.366],
+  '柳州市':[24.326,109.815],'柳州':[24.326,109.815],
+  '桂林市':[25.274,110.299],'桂林':[25.274,110.299],
+  '海南省':[20.044,110.199],'海南':[20.044,110.199],
+  '海口市':[20.044,110.199],'海口':[20.044,110.199],
+  '三亚市':[18.247,109.512],'三亚':[18.247,109.512],
+  '甘肃省':[36.061,103.834],'甘肃':[36.061,103.834],
+  '兰州市':[36.061,103.834],'兰州':[36.061,103.834],
+  '青海省':[36.620,101.778],'青海':[36.620,101.778],
+  '西宁市':[36.620,101.778],'西宁':[36.620,101.778],
+  '新疆维吾尔自治区':[43.793,87.627],'新疆':[43.793,87.627],
+  '乌鲁木齐市':[43.793,87.627],'乌鲁木齐':[43.793,87.627],
+  '西藏自治区':[29.652,91.132],'西藏':[29.652,91.132],
+  '拉萨市':[29.652,91.132],'拉萨':[29.652,91.132],
+  '宁夏回族自治区':[38.467,106.273],'宁夏':[38.467,106.273],
+  '银川市':[38.467,106.273],'银川':[38.467,106.273],
+  '江西省':[28.676,115.892],'江西':[28.676,115.892],
+  '南昌市':[28.676,115.892],'南昌':[28.676,115.892],
+  '九江市':[29.706,115.953],'九江':[29.706,115.953],
+  '景德镇市':[29.269,117.179],'景德镇':[29.269,117.179],
+  '赣州市':[25.831,114.934],'赣州':[25.831,114.934],
+  '吉安市':[27.114,114.993],'吉安':[27.114,114.993],
+  '上饶市':[28.455,117.943],'上饶':[28.455,117.943],
+  '香港特别行政区':[22.319,114.170],'香港':[22.319,114.170],
+  '澳门特别行政区':[22.163,113.545],'澳门':[22.163,113.545],
+  '台湾省':[25.033,121.565],'台湾':[25.033,121.565],
+  '台北市':[25.033,121.565],'台北':[25.033,121.565],
+  '台中市':[24.147,120.674],'台中':[24.147,120.674],
+  '高雄市':[22.627,120.302],'高雄':[22.627,120.302],
+  '美国':[37.090,-95.713],
+  '纽约市':[40.713,-74.006],'纽约':[40.713,-74.006],
+  '洛杉矶市':[34.052,-118.244],'洛杉矶':[34.052,-118.244],
+  '旧金山市':[37.774,-122.419],'旧金山':[37.774,-122.419],'三藩市':[37.774,-122.419],
+  '波士顿市':[42.360,-71.059],'波士顿':[42.360,-71.059],
+  '芝加哥市':[41.878,-87.630],'芝加哥':[41.878,-87.630],
+  '西雅图市':[47.606,-122.332],'西雅图':[47.606,-122.332],
+  '华盛顿特区':[38.907,-77.037],'华盛顿':[38.907,-77.037],
+  '休斯顿市':[29.760,-95.370],'休斯顿':[29.760,-95.370],
+  '达拉斯市':[32.776,-96.797],'达拉斯':[32.776,-96.797],
+  '费城市':[39.952,-75.164],'费城':[39.952,-75.164],
+  '圣何塞市':[37.339,-121.895],'圣何塞':[37.339,-121.895],
+  '拉斯维加斯市':[36.175,-115.137],'拉斯维加斯':[36.175,-115.137],
+  '亚特兰大市':[33.749,-84.388],'亚特兰大':[33.749,-84.388],
+  '迈阿密市':[25.774,-80.194],'迈阿密':[25.774,-80.194],
+  '新泽西':[40.058,-74.406],'加州':[36.778,-119.418],
+  '加拿大':[56.130,-106.347],
+  '多伦多市':[43.651,-79.347],'多伦多':[43.651,-79.347],
+  '温哥华市':[49.247,-123.116],'温哥华':[49.247,-123.116],
+  '蒙特利尔市':[45.508,-73.588],'蒙特利尔':[45.508,-73.588],
+  '卡尔加里市':[51.048,-114.057],'卡尔加里':[51.048,-114.057],
+  '英国':[51.508,-0.128],
+  '伦敦市':[51.508,-0.128],'伦敦':[51.508,-0.128],
+  '曼彻斯特市':[53.480,-2.243],'曼彻斯特':[53.480,-2.243],
+  '伯明翰市':[52.486,-1.890],'伯明翰':[52.486,-1.890],
+  '爱丁堡市':[55.953,-3.189],'爱丁堡':[55.953,-3.189],
+  '法国':[46.227,2.214],'巴黎市':[48.857,2.347],'巴黎':[48.857,2.347],
+  '德国':[51.165,10.452],
+  '柏林市':[52.520,13.405],'柏林':[52.520,13.405],
+  '法兰克福市':[50.110,8.682],'法兰克福':[50.110,8.682],
+  '慕尼黑市':[48.135,11.582],'慕尼黑':[48.135,11.582],
+  '汉堡市':[53.551,9.993],'汉堡':[53.551,9.993],
+  '荷兰':[52.133,5.291],'阿姆斯特丹市':[52.370,4.895],'阿姆斯特丹':[52.370,4.895],
+  '意大利':[41.871,12.567],'罗马市':[41.890,12.492],'罗马':[41.890,12.492],
+  '米兰市':[45.465,9.188],'米兰':[45.465,9.188],
+  '西班牙':[40.464,-3.749],'马德里市':[40.416,-3.704],'马德里':[40.416,-3.704],
+  '巴塞罗那市':[41.385,2.173],'巴塞罗那':[41.385,2.173],
+  '俄罗斯':[61.524,105.319],'莫斯科市':[55.751,37.616],'莫斯科':[55.751,37.616],
+  '日本':[36.205,138.252],
+  '东京都':[35.690,139.692],'东京':[35.690,139.692],
+  '大阪市':[34.693,135.502],'大阪':[34.693,135.502],
+  '名古屋市':[35.181,136.906],'名古屋':[35.181,136.906],
+  '福冈市':[33.590,130.401],'福冈':[33.590,130.401],
+  '横滨市':[35.444,139.638],'横滨':[35.444,139.638],
+  '神户市':[34.691,135.196],'神户':[34.691,135.196],
+  '京都市':[35.011,135.768],'京都':[35.011,135.768],
+  '韩国':[35.908,127.767],
+  '首尔市':[37.566,126.978],'首尔':[37.566,126.978],
+  '釜山市':[35.180,129.075],'釜山':[35.180,129.075],
+  '澳大利亚':[-25.274,133.775],
+  '悉尼市':[-33.869,151.209],'悉尼':[-33.869,151.209],'雪梨':[-33.869,151.209],
+  '墨尔本市':[-37.814,144.963],'墨尔本':[-37.814,144.963],
+  '布里斯班市':[-27.468,153.028],'布里斯班':[-27.468,153.028],
+  '珀斯市':[-31.951,115.861],'珀斯':[-31.951,115.861],
+  '新加坡':[1.352,103.820],'新加坡市':[1.352,103.820],
+  '马来西亚':[4.210,101.976],
+  '吉隆坡市':[3.140,101.687],'吉隆坡':[3.140,101.687],
+  '槟城':[5.414,100.330],
+  '泰国':[15.870,100.993],'曼谷市':[13.756,100.502],'曼谷':[13.756,100.502],
+  '菲律宾':[12.880,121.774],'马尼拉市':[14.599,120.984],'马尼拉':[14.599,120.984],
+  '越南':[14.058,108.278],'河内市':[21.028,105.834],'河内':[21.028,105.834],
+  '胡志明市':[10.823,106.630],'胡志明':[10.823,106.630],
+  '印度尼西亚':[0.789,113.921],'雅加达市':[-6.208,106.846],'雅加达':[-6.208,106.846],
+  '阿联酋':[23.424,53.848],'迪拜市':[25.204,55.271],'迪拜':[25.204,55.271],
+  '新西兰':[-40.901,174.886],
+  '奥克兰市':[-36.848,174.763],'奥克兰':[-36.848,174.763],
+};
+
+
+function geocodeLocation(locationStr) {
+  if (!locationStr) return null;
+  const str = locationStr.trim();
+
+  // Sort dict keys longest-first so we match "深圳市" before "深圳" before "广东"
+  const sortedKeys = Object.keys(GEO_DICT).sort((a, b) => b.length - a.length);
+
+  // First pass: find the longest key that appears in the location string
+  for (const key of sortedKeys) {
+    if (str.includes(key)) {
+      return { coords: GEO_DICT[key], label: key };
+    }
+  }
+  return null;
+}
+
+function renderMap() {
+  // Initialize Leaflet map once
+  if (!mapInitialized) {
+    mapInstance = L.map('map-container', {
+      center: [35, 105],
+      zoom: 4,
+      zoomControl: true,
+    });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+      maxZoom: 18,
+    }).addTo(mapInstance);
+    mapInitialized = true;
+  }
+
+  // CRITICAL: tell Leaflet to recalculate container size after panel becomes visible
+  setTimeout(() => {
+    mapInstance.invalidateSize();
+    doRenderMapMarkers();
+  }, 100);
+}
+
+function doRenderMapMarkers() {
+  // Clear existing markers
+  mapInstance.eachLayer(layer => {
+    if (layer instanceof L.CircleMarker || layer instanceof L.Marker) {
+      mapInstance.removeLayer(layer);
+    }
+  });
+
+  // Aggregate by location
+  const locMap = {}; // key → { coords, label, members: [{name, type, gen}] }
+
+  function addToMap(m, locStr, type) {
+    if (!locStr) return;
+    const geo = geocodeLocation(locStr);
+    if (!geo) return;
+    const key = geo.coords.join(',');
+    if (!locMap[key]) locMap[key] = { coords: geo.coords, label: locStr, members: [] };
+    // Avoid duplicate entries for same member
+    if (!locMap[key].members.find(x => x.name === m.name && x.type === type)) {
+      locMap[key].members.push({ name: m.name, type, gen: m.gen || '', id: m.id });
+    }
+  }
+
+  members.forEach(m => {
+    if (m.location) addToMap(m, m.location, '现居');
+  });
+
+  // Draw markers
+  const cities = new Set(), provinces = new Set(), countries = new Set();
+
+  Object.values(locMap).forEach(loc => {
+    const hasLiving  = loc.members.some(x => x.type === '现居');
+    const hasHometown = loc.members.some(x => x.type === '祖籍');
+    const total = loc.members.length;
+
+    // Color: blue if has living, gold if only hometown
+    const color = '#2563eb';
+    const radius = Math.min(8 + total * 3, 28);
+
+    const marker = L.circleMarker(loc.coords, {
+      radius,
+      fillColor: color,
+      color: 'white',
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.85,
+    }).addTo(mapInstance);
+
+    // Number label
+    if (total > 1) {
+      const icon = L.divIcon({
+        html: `<div style="color:white;font-size:11px;font-weight:700;text-align:center;line-height:${radius*2}px;width:${radius*2}px;height:${radius*2}px">${total}</div>`,
+        className: '',
+        iconSize: [radius*2, radius*2],
+        iconAnchor: [radius, radius],
+      });
+      L.marker(loc.coords, { icon, interactive: false }).addTo(mapInstance);
+    }
+
+    // Popup
+    const memberRows = loc.members.map(mbr =>
+      `<div class="popup-member" onclick="closeMapPopupAndOpen('${mbr.id}')">
+        <span>👤 ${mbr.name}</span>
+        ${mbr.gen ? `<span class="popup-badge">${mbr.gen}</span>` : ''}
+      </div>`
+    ).join('');
+
+    marker.bindPopup(`
+      <div class="popup-title">📍 ${loc.label}</div>
+      <div style="max-height:200px;overflow-y:auto">${memberRows}</div>
+    `, { maxWidth: 260 });
+
+    // Track for stats
+    const label = loc.label;
+    const isAbroad = ['美国','英国','法国','德国','日本','韩国','澳大利亚','加拿大','新加坡','马来西亚'].some(c => label.includes(c));
+    if (isAbroad) {
+      countries.add(label.split(/\s/)[0]);
+    } else if (label.includes('省') || label.includes('市') || ['广东','浙江','江苏','湖南','湖北','四川','山东','福建','安徽','河南','河北','辽宁','吉林','黑龙江','广西','云南','贵州','陕西','山西','江西','甘肃','新疆','西藏','内蒙古','宁夏','青海','海南'].some(p => label.includes(p))) {
+      provinces.add(label.split(/\s/)[0]);
+    } else {
+      cities.add(label);
+    }
+  });
+
+  // Update stats
+  document.getElementById('map-stat-cities').textContent = Object.keys(locMap).length;
+  document.getElementById('map-stat-provinces').textContent = provinces.size + countries.size;
+  document.getElementById('map-stat-countries').textContent = countries.size || (provinces.size > 1 ? Math.ceil(provinces.size / 8) : 1);
+
+  // Fit bounds if we have markers
+  const allCoords = Object.values(locMap).map(l => l.coords);
+  if (allCoords.length > 0) {
+    mapInstance.fitBounds(allCoords, { padding: [40, 40], maxZoom: 8 });
+  }
+}
+
+function closeMapPopupAndOpen(memberId) {
+  // Close leaflet popup, switch to add tab, open modal
+  mapInstance.closePopup();
+  const m = members.find(x => String(x.id) === String(memberId));
+  if (m) openModal(m.id);
+}
+
+let toastTimer;
+function toast(msg, isErr) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (isErr ? ' err' : '');
+  if (toastTimer) clearTimeout(toastTimer);
+  if (!isErr) toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
+}
+</script>
+</body>
+</html>
