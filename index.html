@@ -1201,7 +1201,6 @@ function renderTree() {
   // ── Draw nodes ──────────────────────────────────────────
   allM.forEach(m => {
     const p = pos[m.id]; if (!p) return;
-    const ph     = photos.find(ph2 => ph2.to === m.name);
     const mine   = isMine(m);
     const isVirt = m.virtual;
     const isMale = m.gender === 'male';
@@ -1221,7 +1220,7 @@ function renderTree() {
       ${mine?`<rect x="${p.x}" y="${p.y}" width="${NW}" height="2.5" rx="1.5" fill="#c8882a"/>`:
              isDead?`<rect x="${p.x}" y="${p.y}" width="${NW}" height="2" rx="1" fill="#aaa"/>`:'' }`;
 
-    // Top label: generation or 配偶 — drawn FIRST so it appears above photo
+    // 辈分标签（顶部小字）
     const label = isVirt ? '配偶' : (m.gen ? m.gen.replace('第','').substring(0,3) : '');
     if (label) {
       h += `<text x="${p.x+NW/2}" y="${p.y+9}" text-anchor="middle"
@@ -1229,35 +1228,20 @@ function renderTree() {
         font-family="Noto Sans SC,sans-serif">${label}</text>`;
     }
 
-    // Photo thumbnail — sits below the gen label
+    // 姓名竖排（始终显示，不受照片影响）
     const topOff = (mine?2.5:isDead?2:0) + (label ? 10 : 3);
-    if (ph) {
-      const imgS = NW - 6;
-      const imgY = p.y + topOff;
-      const cid  = 'cp'+String(m.id).replace(/\W/g,'');
-      h += `<clipPath id="${cid}"><rect x="${p.x+3}" y="${imgY}" width="${imgS}" height="${imgS}" rx="2"/></clipPath>
-        <image href="${ph.url}" x="${p.x+3}" y="${imgY}" width="${imgS}" height="${imgS}" clip-path="url(#${cid})"/>`;
-    }
-
-    // Name — only shown when there is NO photo
-    if (!ph) {
-      const chars = m.name.split('');
-      const charH = 13, totalH = chars.length * charH;
-      const startY = p.y + topOff + Math.max(0, (NH - topOff - 10 - totalH) / 2) + charH;
-      if (isDead && !isVirt) {
-        h += `<text x="${p.x+NW/2}" y="${startY - charH + 2}" text-anchor="middle"
-          font-size="8" fill="#999">✝</text>`;
-      }
-      chars.forEach((ch, i) => {
-        h += `<text x="${p.x+NW/2}" y="${startY+i*charH}" text-anchor="middle"
-          font-size="13" font-weight="600" fill="${tc}"
-          font-family="Noto Serif SC,serif">${ch}</text>`;
-      });
-    } else if (isDead && !isVirt) {
-      // Show ✝ on photo nodes too
-      h += `<text x="${p.x+NW-5}" y="${p.y+topOff+10}" text-anchor="middle"
+    const chars  = m.name.split('');
+    const charH  = 13, totalH = chars.length * charH;
+    const startY = p.y + topOff + Math.max(0, (NH - topOff - 10 - totalH) / 2) + charH;
+    if (isDead && !isVirt) {
+      h += `<text x="${p.x+NW/2}" y="${startY - charH + 2}" text-anchor="middle"
         font-size="8" fill="#999">✝</text>`;
     }
+    chars.forEach((ch, i) => {
+      h += `<text x="${p.x+NW/2}" y="${startY+i*charH}" text-anchor="middle"
+        font-size="13" font-weight="600" fill="${tc}"
+        font-family="Noto Serif SC,serif">${ch}</text>`;
+    });
 
     h += '</g>';
   });
