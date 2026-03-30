@@ -1075,10 +1075,8 @@ function renderTree() {
   });
 
   // ── Spouse pairing ─────────────────────────────────────
-  // 原则：有孩子（childrenOf里有记录）的一方为primary，另一方为side
-  // 两方都有孩子时都保留为节点（不能互为side）
   const sideSpouseIds = new Set();
-  const partnerOf = {};  // primaryId → spouseObject
+  const partnerOf = {};
 
   members.forEach(m => {
     if (!m.spouse) return;
@@ -1086,27 +1084,22 @@ function renderTree() {
     if (!sp || sp.virtual) return;
     if (sideSpouseIds.has(sp.id) || sideSpouseIds.has(m.id)) return;
 
-    const mHasParent  = !!hasParent[m.id];
-    const spHasParent = !!hasParent[sp.id];
-    const mHasKids    = !!(childrenOf[m.name]?.length);
-    const spHasKids   = !!(childrenOf[sp.name]?.length);
+    // 判断各自"独有"的孩子（非共同孩子）
+    const mKids  = childrenOf[m.name]  || [];
+    const spKids = childrenOf[sp.name] || [];
+    const mUniqueKids  = mKids.filter(k  => !spKids.find(k2 => k2.id === k.id));
+    const spUniqueKids = spKids.filter(k => !mKids.find(k2  => k2.id === k.id));
+
+    // 如果双方都有"独有"孩子（前婚孩子等），各自保留为节点，不配对
+    if (mUniqueKids.length > 0 && spUniqueKids.length > 0) return;
 
     let primary, side;
-
-    if (mHasKids && spHasKids) {
-      // 双方都有孩子 → 都是节点，不能互为side，跳过配对
-      return;
-    } else if (mHasKids && !spHasKids) {
-      primary = m; side = sp;
-    } else if (!mHasKids && spHasKids) {
-      primary = sp; side = m;
-    } else if (mHasParent && !spHasParent) {
-      primary = m; side = sp;
-    } else if (!mHasParent && spHasParent) {
-      primary = sp; side = m;
-    } else {
-      primary = m; side = sp;
-    }
+    // 谁是丁氏族人（有父母记录）谁做primary
+    if (hasParent[m.id] && !hasParent[sp.id])       { primary = m;  side = sp; }
+    else if (!hasParent[m.id] && hasParent[sp.id])  { primary = sp; side = m;  }
+    // 都是族人或都不是：独有孩子多的做primary
+    else if (mUniqueKids.length >= spUniqueKids.length) { primary = m; side = sp; }
+    else                                               { primary = sp; side = m; }
 
     sideSpouseIds.add(side.id);
     partnerOf[primary.id] = side;
