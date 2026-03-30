@@ -1116,7 +1116,8 @@ function renderTree() {
   const NW  = 36;   // node width
   const NH  = 80;   // node height
   const GY  = 60;   // vertical gap between generations
-  const GX  = 14;   // horizontal gap between siblings
+  const GX  = 10;   // horizontal gap between siblings within same family
+  const FX  = 40;   // extra gap between different family branches (同世不同家庭)
   const SPG = 8;    // gap between member and spouse
 
   const pos = {};   // id → {x, y}
@@ -1191,12 +1192,21 @@ function renderTree() {
       totalW = myW;
     } else {
       let cx = xStart, sumW = 0;
-      children.forEach(child => {
+      children.forEach((child, idx) => {
         const cw = layout(child, cx);
-        cx   += cw + GX;
-        sumW += cw + GX;
+        if (idx < children.length - 1) {
+          const nextChild = children[idx + 1];
+          // 同一父（或母）来的兄弟用小间距，否则用大间距区分不同家庭
+          const sameFamily = (child.father && child.father === nextChild.father)
+                          || (child.mother && child.mother === nextChild.mother);
+          const gap = sameFamily ? GX : FX;
+          cx   += cw + gap;
+          sumW += cw + gap;
+        } else {
+          cx   += cw;
+          sumW += cw;
+        }
       });
-      sumW -= GX;
       const firstChildX    = pos[children[0].id].x;
       const lastChild      = children[children.length - 1];
       const lastChildSp    = partnerOf[lastChild.id];
@@ -1216,7 +1226,7 @@ function renderTree() {
   let rootX = 20;
   roots.forEach(r => {
     const w = layout(r, rootX);
-    rootX += w + GX * 4;
+    rootX += w + FX * 2;
   });
 
   // SVG dimensions
