@@ -1120,60 +1120,91 @@ function renderTree() {
   const roots = members.filter(m => !hasParent[m.id] && !sideSpouseIds.has(m.id));
 
   // ── Layout constants ────────────────────────────────────
-  // Top-to-bottom layout: generations go downward
-  // Each node is a vertical-text card: narrow width, tall height
   const NW  = 36;   // node width
-  const NH  = 80;   // node height (shorter since horizontal names now)
+  const NH  = 80;   // node height
   const GY  = 60;   // vertical gap between generations
   const GX  = 14;   // horizontal gap between siblings
-  const SPG = 8;    // gap between member and spouse (horizontal, same row)
+  const SPG = 8;    // gap between member and spouse
 
   const pos = {};   // id → {x, y}
 
-  // Returns total width consumed by this subtree
-  function layout(m, xStart, y) {
+  // ── 第一步：计算每个世代对应的 Y 坐标 ──────────────────
+  // 收集所有出现的世代值，排序后均匀分配 Y
+  const genOrderMap = {};  // memberID → 世代数字
+  allM.forEach(m => {
+    genOrderMap[m.id] = parseGenOrder(m.gen);
+  });
+
+  const allGenValues = [...new Set(Object.values(genOrderMap).filter(v => v < 9000))].sort((a,b)=>a-b);
+  // 没有世代信息的成员，根据其在树中的深度补充
+  // 建立世代数字 → Y坐标的映射
+  const genYMap = {};  // 世代数字 → Y
+  allGenValues.forEach((gv, idx) => {
+    genYMap[gv] = 20 + idx * (NH + GY);
+  });
+  const maxGenY = allGenValues.length > 0 ? 20 + (allGenValues.length - 1) * (NH + GY) : 20;
+
+  // 对于没有世代信息的成员，用其父母的世代+1来估算
+  function estimateGenY(m, visited = new Set()) {
+    if (visited.has(m.id)) return maxGenY + NH + GY;
+    visited.add(m.id);
+    const gv = genOrderMap[m.id];
+    if (gv && gv < 9000 && genYMap[gv] !== undefined) return genYMap[gv];
+    // 找父母
+    const parent = byName[m.father] || byName[m.mother];
+    if (parent) {
+      const parentY = estimateGenY(parent, visited);
+      return parentY + NH + GY;
+    }
+    return maxGenY + NH + GY;
+  }
+
+  function getY(m) {
+    const gv = genOrderMap[m.id];
+    if (gv && gv < 9000 && genYMap[gv] !== undefined) return genYMap[gv];
+    return estimateGenY(m);
+  }
+
+  // ── 第二步：递归分配 X 坐标（Y 由世代固定，不再传递）──
+  function layout(m, xStart) {
     const sp = partnerOf[m.id];
-    // 合并自己和配偶名下的孩子（去重），过滤掉sideSpouse
-    const myChildren  = (childrenOf[m.name]  || []).filter(c => !sideSpouseIds.has(c.id));
-    const spChildren  = sp ? (childrenOf[sp.name] || []).filter(c => !sideSpouseIds.has(c.id) && !myChildren.find(x=>x.id===c.id)) : [];
-    const children    = [...myChildren, ...spChildren];
+    const myChildren = (childrenOf[m.name] || []).filter(c => !sideSpouseIds.has(c.id));
+    const spChildren = sp ? (childrenOf[sp.name] || []).filter(c => !sideSpouseIds.has(c.id) && !myChildren.find(x=>x.id===c.id)) : [];
+    const children   = [...myChildren, ...spChildren];
     const myW = NW + (sp ? SPG + NW : 0);
-    const childY = y + NH + GY;
+    const y   = getY(m);
 
     let totalW;
     if (children.length === 0) {
       pos[m.id] = { x: xStart, y };
       totalW = myW;
     } else {
-      // Layout children first
       let cx = xStart, sumW = 0;
       children.forEach(child => {
-        const cw = layout(child, cx, childY);
-        cx  += cw + GX;
+        const cw = layout(child, cx);
+        cx   += cw + GX;
         sumW += cw + GX;
       });
       sumW -= GX;
-      // Center this node over children
-      const firstChildX = pos[children[0].id].x;
-      const lastChild   = children[children.length - 1];
-      const lastChildSp = partnerOf[lastChild.id];
+      const firstChildX    = pos[children[0].id].x;
+      const lastChild      = children[children.length - 1];
+      const lastChildSp    = partnerOf[lastChild.id];
       const lastChildRight = pos[lastChild.id].x + NW + (lastChildSp ? SPG + NW : 0);
       const midX = (firstChildX + lastChildRight) / 2 - myW / 2;
       pos[m.id] = { x: midX, y };
       totalW = Math.max(sumW, myW);
     }
 
-    // Place spouse to the right at same y
     if (sp) {
       pos[sp.id] = { x: pos[m.id].x + NW + SPG, y };
     }
     return Math.max(totalW, myW);
   }
 
-  // Layout each root tree, stacking root families horizontally
+  // Layout each root tree horizontally
   let rootX = 20;
   roots.forEach(r => {
-    const w = layout(r, rootX, 20);
+    const w = layout(r, rootX);
     rootX += w + GX * 4;
   });
 
