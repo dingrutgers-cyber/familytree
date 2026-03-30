@@ -1647,13 +1647,14 @@ table.gt td{
   text-align:center;
   vertical-align:middle;
 }
-/* Name cell — narrow, vertical name text */
+/* Name cell — vertical name text, wide enough for 13pt characters + padding */
 .nc{
-  width:22pt;
+  width:28pt;
   border-right:0.5pt solid #d4b896 !important;
   background:#fff;
   text-align:center;
   vertical-align:top;
+  overflow:visible;
 }
 .nc.dead{background:#f7f5f2}
 .nc.mine{border-left:1.5pt solid #c8882a !important}
@@ -1675,7 +1676,7 @@ table.gt td{
   word-break:break-all;
   width:100%;
 }
-.vt-name{font-size:13pt;font-weight:700;letter-spacing:3pt}
+.vt-name{font-size:13pt;font-weight:700;letter-spacing:1pt}
 .vt-cross{font-size:8pt;color:#999;display:block;text-align:center;margin-bottom:2pt}
 .vt-info{font-size:10pt;color:#3d2e1a;letter-spacing:0.5pt}
 .vt-info.dead{color:#666}
@@ -1732,7 +1733,7 @@ table.gt td{
       // 每人占两列（姓名列22pt + 简介列按内容分配），成员间用较粗竖线分隔
       const PAGE_PT = 672;
       const GEN_PT  = 22;
-      const NAME_PT = 22;
+      const NAME_PT = 28;  // 竖排13pt字体 + padding，需要至少28pt宽
       const availPt = PAGE_PT - GEN_PT;
 
       // 每人最少需要NAME_PT + 30pt简介列 = 52pt，页面最多放几人
