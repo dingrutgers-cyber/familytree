@@ -1075,7 +1075,8 @@ function renderTree() {
   });
 
   // ── Spouse pairing ─────────────────────────────────────
-  // A member with hasParent=true is a tree node and must NEVER become a side-spouse
+  // 原则：有孩子（childrenOf里有记录）的一方为primary，另一方为side
+  // 两方都有孩子时都保留为节点（不能互为side）
   const sideSpouseIds = new Set();
   const partnerOf = {};  // primaryId → spouseObject
 
@@ -1084,25 +1085,33 @@ function renderTree() {
     const sp = byName[m.spouse];
     if (!sp || sp.virtual) return;
     if (sideSpouseIds.has(sp.id) || sideSpouseIds.has(m.id)) return;
-    const mIsNode  = !!hasParent[m.id];
-    const spIsNode = !!hasParent[sp.id];
+
+    const mHasParent  = !!hasParent[m.id];
+    const spHasParent = !!hasParent[sp.id];
+    const mHasKids    = !!(childrenOf[m.name]?.length);
+    const spHasKids   = !!(childrenOf[sp.name]?.length);
+
     let primary, side;
-    if (mIsNode && !spIsNode)       { primary=m;  side=sp; }
-    else if (!mIsNode && spIsNode)  { primary=sp; side=m;  }
-    else if (mIsNode && spIsNode) {
-      const mK=!!(childrenOf[m.name]?.length), spK=!!(childrenOf[sp.name]?.length);
-      if(mK&&!spK){primary=m;side=sp;}
-      else if(!mK&&spK){primary=sp;side=m;}
-      else return;
+
+    if (mHasKids && spHasKids) {
+      // 双方都有孩子 → 都是节点，不能互为side，跳过配对
+      return;
+    } else if (mHasKids && !spHasKids) {
+      primary = m; side = sp;
+    } else if (!mHasKids && spHasKids) {
+      primary = sp; side = m;
+    } else if (mHasParent && !spHasParent) {
+      primary = m; side = sp;
+    } else if (!mHasParent && spHasParent) {
+      primary = sp; side = m;
     } else {
-      const mK=!!(childrenOf[m.name]?.length), spK=!!(childrenOf[sp.name]?.length);
-      if(mK&&!spK){primary=m;side=sp;}
-      else if(!mK&&spK){primary=sp;side=m;}
-      else{primary=m;side=sp;}
+      primary = m; side = sp;
     }
+
     sideSpouseIds.add(side.id);
     partnerOf[primary.id] = side;
   });
+
   virtual.forEach(v => {
     const partner = byName[v.spouseOf];
     if (partner && !partnerOf[partner.id]) partnerOf[partner.id] = v;
@@ -1123,10 +1132,13 @@ function renderTree() {
 
   // Returns total width consumed by this subtree
   function layout(m, xStart, y) {
-    const children = (childrenOf[m.name] || []).filter(c => !sideSpouseIds.has(c.id));
     const sp = partnerOf[m.id];
-    const myW = NW + (sp ? SPG + NW : 0);  // width of this node+spouse pair
-    const childY = y + NH + GY;  // y position for children
+    // 合并自己和配偶名下的孩子（去重），过滤掉sideSpouse
+    const myChildren  = (childrenOf[m.name]  || []).filter(c => !sideSpouseIds.has(c.id));
+    const spChildren  = sp ? (childrenOf[sp.name] || []).filter(c => !sideSpouseIds.has(c.id) && !myChildren.find(x=>x.id===c.id)) : [];
+    const children    = [...myChildren, ...spChildren];
+    const myW = NW + (sp ? SPG + NW : 0);
+    const childY = y + NH + GY;
 
     let totalW;
     if (children.length === 0) {
