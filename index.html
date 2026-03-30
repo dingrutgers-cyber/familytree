@@ -1302,18 +1302,27 @@ function doSortPhotos(mode) {
 // "第五世" / "第5世" / "五世" / "5" / "仁字辈"（按首次出现顺序）
 function parseGenOrder(genStr) {
   if (!genStr) return 9999;
-  // 先尝试直接提取数字：第5世、5世、第5、5
+
+  // 1. 直接含阿拉伯数字：第5世、5世、第5
   const arabic = genStr.match(/\d+/);
   if (arabic) return parseInt(arabic[0]);
-  // 汉字数字转换：一二三四五六七八九十百
-  const cnMap = {'〇':0,'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,
-                 '十一':11,'十二':12,'十三':13,'十四':14,'十五':15,'十六':16,'十七':17,'十八':18,'十九':19,'二十':20,
-                 '二十一':21,'二十二':22,'二十三':23,'二十四':24,'二十五':25};
-  for (const [k,v] of Object.entries(cnMap).sort((a,b)=>b[0].length-a[0].length)) {
-    if (genStr.includes(k)) return v;
+
+  // 2. 汉字数字 → 整数（支持到九十九）
+  //    先从 genStr 里提取连续汉字数字片段
+  const cn = genStr.replace(/第|世|辈|代/g, '');  // 去掉修饰词，留纯数字汉字
+  const d = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9};
+
+  // 匹配模式：二十三 / 十五 / 二十 / 十 / 三 等
+  const m = cn.match(/^([一二三四五六七八九])?(十)([一二三四五六七八九])?$|^([一二三四五六七八九])$/);
+  if (m) {
+    if (m[4]) return d[m[4]];                            // 纯个位：三 → 3
+    const tens = m[1] ? d[m[1]] * 10 : 10;              // 二十 → 20，十 → 10
+    const ones = m[3] ? d[m[3]] : 0;                    // 十三 → +3
+    return tens + ones;
   }
-  // 非数字辈分（如"仁字辈"）：按该辈分在族员中首次出现的顺序排
-  const allGens = members.map(m=>m.gen).filter(Boolean);
+
+  // 3. 非数字辈分（仁字辈等）：按在族员数据中首次出现顺序
+  const allGens = members.map(m => m.gen).filter(Boolean);
   const idx = allGens.indexOf(genStr);
   return idx >= 0 ? 500 + idx : 9999;
 }
