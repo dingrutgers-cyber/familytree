@@ -1287,12 +1287,15 @@ function renderTree() {
       fill="none" stroke="#6b5540" stroke-width="0.9"/>`;
   });
 
-  // ── Spouse ♥ lines (horizontal between adjacent nodes) ──
+  // ── Spouse ♥ lines ──────────────────────────────────────
   Object.entries(partnerOf).forEach(([mid, sp]) => {
     const primary = allM.find(x => String(x.id) === String(mid));
     if (!primary || !pos[primary.id] || !pos[sp.id]) return;
-    const x1 = pos[primary.id].x + NW;
-    const x2 = pos[sp.id].x;
+    // 无论谁在左谁在右，取两个框之间的间隙画线
+    const leftNode  = pos[primary.id].x < pos[sp.id].x ? primary : sp;
+    const rightNode = pos[primary.id].x < pos[sp.id].x ? sp : primary;
+    const x1 = pos[leftNode.id].x + NW;
+    const x2 = pos[rightNode.id].x;
     if (x2 > x1) {
       const my = pos[primary.id].y + NH / 2;
       h += `<line x1="${x1}" y1="${my}" x2="${x2}" y2="${my}"
