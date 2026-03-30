@@ -1402,12 +1402,16 @@ function doGenPDF() {
   const inclPhotos  = document.getElementById('po-photos').classList.contains('on');
 
   const sorted = [...members].sort((a,b)=>{
-    const ga=parseInt(a.gen)||99,gb=parseInt(b.gen)||99;
+    const ga=parseGenOrder(a.gen),gb=parseGenOrder(b.gen);
     if(ga!==gb)return ga-gb;
     return(parseInt(a.birth)||9999)-(parseInt(b.birth)||9999);
   });
   const byGen={};
   sorted.forEach(m=>{const g=m.gen||'未记世代';if(!byGen[g])byGen[g]=[];byGen[g].push(m);});
+  // 确保世代按辈分顺序排列
+  const byGenSorted=Object.fromEntries(
+    Object.entries(byGen).sort((a,b)=>parseGenOrder(a[0])-parseGenOrder(b[0]))
+  );
 
   function yearCN(y){
     const s=String(y||'').match(/\d{4}/);
@@ -1578,7 +1582,7 @@ table.gt td{
   <div class="cover-meta">丁氏一脉 · 血脉相承 · 薪火相传</div>
   <div class="cover-stats">
     <div><div class="cs-num">${members.length}</div><div class="cs-lbl">族　员</div></div>
-    <div><div class="cs-num">${Object.keys(byGen).length}</div><div class="cs-lbl">世　代</div></div>
+    <div><div class="cs-num">${Object.keys(byGenSorted).length}</div><div class="cs-lbl">世　代</div></div>
     <div><div class="cs-num">${members.filter(m=>m.death).length}</div><div class="cs-lbl">已　故</div></div>
   </div>
 </div>`;
@@ -1606,7 +1610,7 @@ table.gt td{
   </div>
   <div class="sec-rule"><span>◆</span></div>`;
 
-    Object.entries(byGen).forEach(([gen,mlist])=>{
+    Object.entries(byGenSorted).forEach(([gen,mlist])=>{
       // ── 同一世所有人横排，名字和简介均为竖排文字 ──
       // 结构：[世代标签竖排] | [姓名竖排][简介竖排] | [姓名竖排][简介竖排] | ...
       // 每人占两列（姓名列22pt + 简介列按内容分配），成员间用较粗竖线分隔
