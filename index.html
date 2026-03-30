@@ -1186,9 +1186,12 @@ function renderTree() {
     const myW = NW + (sp ? SPG + NW : 0);
     const y   = getMemberY(m) ?? 20;
 
+    // 男左女右：如果 primary 是女性而 side 是男性，交换绘制位置
+    const spouseOnLeft = sp && m.gender === 'female' && sp.gender === 'male';
+
     let totalW;
     if (children.length === 0) {
-      pos[m.id] = { x: xStart, y };
+      pos[m.id] = { x: spouseOnLeft ? xStart + NW + SPG : xStart, y };
       totalW = myW;
     } else {
       let cx = xStart, sumW = 0;
@@ -1196,28 +1199,36 @@ function renderTree() {
         const cw = layout(child, cx);
         if (idx < children.length - 1) {
           const nextChild = children[idx + 1];
-          // 同一父（或母）来的兄弟用小间距，否则用大间距区分不同家庭
+          // 同一小家庭的兄弟（同父 OR 同母）用小间距
           const sameFamily = (child.father && child.father === nextChild.father)
                           || (child.mother && child.mother === nextChild.mother);
+          // 关键：左边子节点的实际右边界要加上其配偶的宽度
+          const childSp = partnerOf[child.id];
+          const childRight = pos[child.id].x + NW + (childSp ? SPG + NW : 0);
+          // 下一个子节点从 childRight + gap 开始
           const gap = sameFamily ? GX : FX;
-          cx   += cw + gap;
-          sumW += cw + gap;
+          cx = childRight + gap;
+          sumW = cx - xStart;
         } else {
-          cx   += cw;
-          sumW += cw;
+          const childSp = partnerOf[child.id];
+          const childRight = pos[child.id] ? pos[child.id].x + NW + (childSp ? SPG + NW : 0) : cx + NW;
+          sumW = childRight - xStart;
         }
       });
       const firstChildX    = pos[children[0].id].x;
       const lastChild      = children[children.length - 1];
       const lastChildSp    = partnerOf[lastChild.id];
       const lastChildRight = pos[lastChild.id].x + NW + (lastChildSp ? SPG + NW : 0);
+      // 居中：primary+spouse 整体居中于所有孩子上方
       const midX = (firstChildX + lastChildRight) / 2 - myW / 2;
-      pos[m.id] = { x: midX, y };
+      pos[m.id] = { x: spouseOnLeft ? midX + NW + SPG : midX, y };
       totalW = Math.max(sumW, myW);
     }
 
+    // 配偶位置：男左女右
     if (sp) {
-      pos[sp.id] = { x: pos[m.id].x + NW + SPG, y: getMemberY(sp) ?? y };
+      const spX = spouseOnLeft ? pos[m.id].x - SPG - NW : pos[m.id].x + NW + SPG;
+      pos[sp.id] = { x: spX, y: getMemberY(sp) ?? y };
     }
     return Math.max(totalW, myW);
   }
@@ -1244,16 +1255,39 @@ function renderTree() {
 
   let h = '';
 
-  // ── Parent→child lines (vertical, with right-angle bends) ─
+  // ── Parent→child lines ────────────────────────────────
+  // 连线从丁氏族人一方（father或mother中在族谱里的那位）连到孩子
+  // 若父母都在族谱，选 hasParent 的那方（即丁氏正式成员）
+  const drawnLines = new Set();
   members.forEach(m => {
-    if (!m.father) return;
-    const par = byName[m.father];
-    if (!par || !pos[m.id] || !pos[par.id]) return;
-    // Line from bottom-center of parent to top-center of child
-    const px  = pos[par.id].x + NW / 2;
-    const py  = pos[par.id].y + NH;       // bottom of parent
-    const cx  = pos[m.id].x  + NW / 2;
-    const cy  = pos[m.id].y;              // top of child
+    if (drawnLines.has(m.id) || !pos[m.id]) return;
+
+    const fatherNode = m.father ? byName[m.father] : null;
+    const motherNode = m.mother ? byName[m.mother] : null;
+    const fatherPos  = fatherNode ? pos[fatherNode.id] : null;
+    const motherPos  = motherNode ? pos[motherNode.id] : null;
+
+    // 优先选丁氏一方：hasParent 的那方；都是或都不是则优先父
+    let par = null, parPos = null;
+    if (fatherPos && motherPos) {
+      // 两方都在族谱：选 hasParent 的那方（丁氏成员）
+      if (hasParent[motherNode.id] && !hasParent[fatherNode.id]) {
+        par = motherNode; parPos = motherPos;
+      } else {
+        par = fatherNode; parPos = fatherPos;
+      }
+    } else if (fatherPos) {
+      par = fatherNode; parPos = fatherPos;
+    } else if (motherPos) {
+      par = motherNode; parPos = motherPos;
+    }
+    if (!par || !parPos) return;
+
+    drawnLines.add(m.id);
+    const px   = parPos.x + NW / 2;
+    const py   = parPos.y + NH;
+    const cx   = pos[m.id].x + NW / 2;
+    const cy   = pos[m.id].y;
     const midY = py + (cy - py) / 2;
     h += `<path d="M${px} ${py} V${midY} H${cx} V${cy}"
       fill="none" stroke="#6b5540" stroke-width="0.9"/>`;
