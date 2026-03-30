@@ -1129,40 +1129,58 @@ function renderTree() {
   const pos = {};   // id → {x, y}
 
   // ── 第一步：计算每个世代对应的 Y 坐标 ──────────────────
-  // 收集所有出现的世代值，排序后均匀分配 Y
   const genOrderMap = {};  // memberID → 世代数字
   allM.forEach(m => {
     genOrderMap[m.id] = parseGenOrder(m.gen);
   });
 
   const allGenValues = [...new Set(Object.values(genOrderMap).filter(v => v < 9000))].sort((a,b)=>a-b);
-  // 没有世代信息的成员，根据其在树中的深度补充
-  // 建立世代数字 → Y坐标的映射
   const genYMap = {};  // 世代数字 → Y
   allGenValues.forEach((gv, idx) => {
     genYMap[gv] = 20 + idx * (NH + GY);
   });
-  const maxGenY = allGenValues.length > 0 ? 20 + (allGenValues.length - 1) * (NH + GY) : 20;
 
-  // 对于没有世代信息的成员，用其父母的世代+1来估算
-  function estimateGenY(m, visited = new Set()) {
-    if (visited.has(m.id)) return maxGenY + NH + GY;
+  // memberID → Y坐标，优先用自己的gen，没有则用配偶gen，再没有则用孩子gen-1
+  const memberYCache = {};
+  function getMemberY(m, visited = new Set()) {
+    if (memberYCache[m.id] !== undefined) return memberYCache[m.id];
+    if (visited.has(m.id)) return null;
     visited.add(m.id);
-    const gv = genOrderMap[m.id];
-    if (gv && gv < 9000 && genYMap[gv] !== undefined) return genYMap[gv];
-    // 找父母
-    const parent = byName[m.father] || byName[m.mother];
-    if (parent) {
-      const parentY = estimateGenY(parent, visited);
-      return parentY + NH + GY;
-    }
-    return maxGenY + NH + GY;
-  }
 
-  function getY(m) {
+    // 1. 自己有世代
     const gv = genOrderMap[m.id];
-    if (gv && gv < 9000 && genYMap[gv] !== undefined) return genYMap[gv];
-    return estimateGenY(m);
+    if (gv && gv < 9000 && genYMap[gv] !== undefined) {
+      return memberYCache[m.id] = genYMap[gv];
+    }
+
+    // 2. 配偶有世代（配对关系已建立：partnerOf 或 sideSpouseIds）
+    // 找配偶：先看 partnerOf，再看谁的 partnerOf 是自己
+    const spouseAsPartner = Object.entries(partnerOf).find(([pid, sp]) => String(sp.id) === String(m.id));
+    const spouse = partnerOf[m.id] || (spouseAsPartner ? allM.find(x => String(x.id) === spouseAsPartner[0]) : null)
+                || (m.spouse ? byName[m.spouse] : null);
+    if (spouse) {
+      const spY = getMemberY(spouse, visited);
+      if (spY !== null) return memberYCache[m.id] = spY;
+    }
+
+    // 3. 有孩子：用孩子的Y往上推一格
+    const kids = (childrenOf[m.name] || []);
+    for (const kid of kids) {
+      const kidY = getMemberY(kid, visited);
+      if (kidY !== null) {
+        // 找孩子世代对应的前一个世代的Y
+        const kidGv = genOrderMap[kid.id];
+        if (kidGv && kidGv < 9000) {
+          const kidIdx = allGenValues.indexOf(kidGv);
+          if (kidIdx > 0) return memberYCache[m.id] = genYMap[allGenValues[kidIdx - 1]];
+        }
+        return memberYCache[m.id] = kidY - (NH + GY);
+      }
+    }
+
+    // 4. 实在找不到，放最底部
+    const maxY = allGenValues.length > 0 ? genYMap[allGenValues[allGenValues.length - 1]] : 20;
+    return memberYCache[m.id] = maxY;
   }
 
   // ── 第二步：递归分配 X 坐标（Y 由世代固定，不再传递）──
@@ -1172,7 +1190,7 @@ function renderTree() {
     const spChildren = sp ? (childrenOf[sp.name] || []).filter(c => !sideSpouseIds.has(c.id) && !myChildren.find(x=>x.id===c.id)) : [];
     const children   = [...myChildren, ...spChildren];
     const myW = NW + (sp ? SPG + NW : 0);
-    const y   = getY(m);
+    const y   = getMemberY(m) ?? 20;
 
     let totalW;
     if (children.length === 0) {
@@ -1196,7 +1214,7 @@ function renderTree() {
     }
 
     if (sp) {
-      pos[sp.id] = { x: pos[m.id].x + NW + SPG, y };
+      pos[sp.id] = { x: pos[m.id].x + NW + SPG, y: getMemberY(sp) ?? y };
     }
     return Math.max(totalW, myW);
   }
