@@ -1054,12 +1054,24 @@ function renderTree() {
   allM.forEach(m => { byName[m.name] = m; });
 
   // ── Parent→child relationships ─────────────────────────
+  // 同时检查 father 和 mother，任意一方在族谱里都建立连接
   const childrenOf = {}, hasParent = {};
   members.forEach(m => {
-    if (!m.father || !byName[m.father]) return;
-    if (!childrenOf[m.father]) childrenOf[m.father] = [];
-    childrenOf[m.father].push(m);
-    hasParent[m.id] = true;
+    // 通过父亲建立关系
+    if (m.father && byName[m.father]) {
+      if (!childrenOf[m.father]) childrenOf[m.father] = [];
+      // 避免重复添加
+      if (!childrenOf[m.father].find(c => c.id === m.id))
+        childrenOf[m.father].push(m);
+      hasParent[m.id] = true;
+    }
+    // 通过母亲建立关系（父亲不在族谱、或只知道母亲是丁氏的情况）
+    if (m.mother && byName[m.mother]) {
+      if (!childrenOf[m.mother]) childrenOf[m.mother] = [];
+      if (!childrenOf[m.mother].find(c => c.id === m.id))
+        childrenOf[m.mother].push(m);
+      hasParent[m.id] = true;
+    }
   });
 
   // ── Spouse pairing ─────────────────────────────────────
