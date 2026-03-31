@@ -1057,21 +1057,27 @@ function renderTree() {
   // 同时检查 father 和 mother，任意一方在族谱里都建立连接
   const childrenOf = {}, hasParent = {};
   members.forEach(m => {
-    // 通过父亲建立关系
     if (m.father && byName[m.father]) {
       if (!childrenOf[m.father]) childrenOf[m.father] = [];
-      // 避免重复添加
       if (!childrenOf[m.father].find(c => c.id === m.id))
         childrenOf[m.father].push(m);
       hasParent[m.id] = true;
     }
-    // 通过母亲建立关系（父亲不在族谱、或只知道母亲是丁氏的情况）
     if (m.mother && byName[m.mother]) {
       if (!childrenOf[m.mother]) childrenOf[m.mother] = [];
       if (!childrenOf[m.mother].find(c => c.id === m.id))
         childrenOf[m.mother].push(m);
       hasParent[m.id] = true;
     }
+  });
+
+  // ── 按出生年排序每组孩子，配偶紧跟其后 ───────────────────
+  // 注意：spouse pairing 还没建立，这里只做基础 birth 排序
+  // 配偶相邻由 layout 的 partnerOf 保证（side 永远紧贴 primary）
+  Object.keys(childrenOf).forEach(parentName => {
+    childrenOf[parentName].sort((a, b) =>
+      (parseInt(a.birth) || 9999) - (parseInt(b.birth) || 9999)
+    );
   });
 
   // ── Spouse pairing ─────────────────────────────────────
@@ -1727,10 +1733,35 @@ table.gt td{
   </div>
   <div class="sec-rule"><span>◆</span></div>`;
 
-    Object.entries(byGenSorted).forEach(([gen,mlist])=>{
+    Object.entries(byGenSorted).forEach(([gen,rawMlist])=>{
+      // ── 同世成员按出生年排序，配偶紧跟其主成员 ──
+      // 先找出哪些人是配偶（spouse字段互相指向），配对后以主成员birth代表排序
+      const spouseNames = new Set();
+      rawMlist.forEach(m => {
+        if (m.spouse) {
+          const sp = rawMlist.find(x => x.name === m.spouse);
+          if (sp) spouseNames.add(sp.name); // 先标记，下面决定谁是side
+        }
+      });
+      // 简单规则：如果 A.spouse===B.name 且 B.spouse===A.name，birth较小的为主
+      // 逐对处理，避免重复
+      const paired = new Set();
+      const orderedPairs = []; // [{main, side|null}]
+      // 先按birth排序原始列表
+      const baseSorted = [...rawMlist].sort((a,b)=>
+        (parseInt(a.birth)||9999)-(parseInt(b.birth)||9999)
+      );
+      baseSorted.forEach(m => {
+        if (paired.has(m.name)) return;
+        paired.add(m.name);
+        const sp = m.spouse ? baseSorted.find(x => x.name === m.spouse && !paired.has(x.name)) : null;
+        if (sp) paired.add(sp.name);
+        orderedPairs.push({ main: m, side: sp || null });
+      });
+      // 展开成扁平列表：主成员 + 配偶紧跟
+      const mlist = orderedPairs.flatMap(p => p.side ? [p.main, p.side] : [p.main]);
+
       // ── 同一世所有人横排，名字和简介均为竖排文字 ──
-      // 结构：[世代标签竖排] | [姓名竖排][简介竖排] | [姓名竖排][简介竖排] | ...
-      // 每人占两列（姓名列22pt + 简介列按内容分配），成员间用较粗竖线分隔
       const PAGE_PT = 672;
       const GEN_PT  = 22;
       const NAME_PT = 28;  // 竖排13pt字体 + padding，需要至少28pt宽
