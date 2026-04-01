@@ -805,13 +805,13 @@ async function doSaveMember() {
   if (editId) {
     // UPDATE
     const { data: updated, error } = await db.from('members')
-      .update({...row, updated_at: new Date()})
+      .update({...row, updated_at: new Date().toISOString()})
       .eq('id', editId)
       .select(); // FIX-F2: detect silent RLS block (0 rows = no permission)
     if (error) { toast('❌ 更新失败：' + error.message, true); return; }
     if (!updated || updated.length === 0) { toast('❌ 无权限修改此记录', true); return; }
     const idx = members.findIndex(m => m.id === editId);
-    if (idx >= 0) members[idx] = { ...members[idx], ...mapRow({...row, id: editId, created_by: me.id}) };
+    if (idx >= 0) members[idx] = mapRow(updated[0]); // BUG2-FIX: use actual DB row, not manual reconstruction
     editId = null;
     document.getElementById('form-title').textContent = '新增族员信息';
     document.getElementById('save-btn').textContent = '＋ 保存至云端';
@@ -1511,7 +1511,7 @@ async function doSavePreface() {
   const { error } = await db.from('preface').upsert({
     id: '00000000-0000-0000-0000-000000000001',
     clan_name: pref.name, year: pref.year, ancestor: pref.anc, text: pref.text,
-    updated_at: new Date()
+    updated_at: new Date().toISOString()
   });
   if (error) { toast('❌ 保存失败：' + error.message, true); return; }
   toast('✓ 序言已保存至云端');
