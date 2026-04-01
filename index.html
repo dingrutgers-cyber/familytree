@@ -180,7 +180,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
 .female{background:rgba(155,40,80,.1);color:#8a2a50;border:1px solid rgba(155,40,80,.2)}
 .member-name{font-size:14px;font-weight:700;color:#1a1209;margin-bottom:3px}
 .member-info{font-size:11px;color:#6b5540;line-height:1.5}
-.member-card.deceased{opacity:.82;background:linear-gradient(135deg,#f8f5f0,#f0ebe0)} /* FIX-CSS: moved out of .member-tag */
+.member-card.deceased{opacity:.82;background:linear-gradient(135deg,#f8f5f0,#f0ebe0)}
 .member-tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;
   margin-top:6px;background:rgba(200,136,42,.1);color:#7a5010;
   border:1px solid rgba(200,136,42,.25)}
@@ -387,6 +387,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
       <div class="tab" onclick="showTab('preface')">卷 家族序言</div>
       <div class="tab" onclick="showTab('pdf')">⬇ 导出PDF</div>
       <div class="tab" onclick="showTab('map')">🗺 族人分布</div>
+      <div class="tab" id="tab-btn-admin" onclick="showTab('admin')" style="display:none">🔐 管理员</div>
     </div>
   </div>
 
@@ -587,6 +588,48 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
       </div>
     </div>
 
+    <!-- ADMIN -->
+    <div class="panel" id="tab-admin">
+      <div class="card" style="border-color:#c8882a">
+        <div class="card-title" style="color:#9b2828">🔐 管理员专区</div>
+        <div class="notice info" style="margin-bottom:16px">此功能仅限管理员使用。所有下载均包含完整数据。</div>
+        <div class="section-label">照片下载</div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">◉ 批量下载照片</div>
+          <p style="font-size:12px;color:#6b5540;margin-bottom:12px;line-height:1.8">将所有已上传照片打包为 ZIP 文件下载到本地。照片以「族员姓名」命名。</p>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-primary" onclick="doDownloadPhotosZip()">📦 下载全部照片 ZIP</button>
+            <span id="admin-photo-count" style="font-size:12px;color:#6b5540"></span>
+          </div>
+          <div id="admin-photo-msg" style="margin-top:8px;font-size:12px;color:#6b5540"></div>
+        </div>
+        <div class="section-label">数据导出</div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">⊙ 导出族员数据</div>
+          <p style="font-size:12px;color:#6b5540;margin-bottom:12px;line-height:1.8">导出所有族员记录，可用于备份或迁移。</p>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-primary" onclick="doExportMembersJSON()">⬇ 导出 JSON</button>
+            <button class="btn btn-secondary" onclick="doExportMembersCSV()">⬇ 导出 CSV</button>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">卷 导出序言</div>
+          <p style="font-size:12px;color:#6b5540;margin-bottom:12px;line-height:1.8">导出家族序言内容为文本文件。</p>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-primary" onclick="doExportPreface()">⬇ 导出序言 TXT</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">📦 一键导出全部数据</div>
+          <p style="font-size:12px;color:#6b5540;margin-bottom:12px;line-height:1.8">将族员数据（JSON + CSV）、序言、全部照片打包为一个 ZIP 文件。完整备份。</p>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn btn-primary" style="background:linear-gradient(135deg,#1a6030,#2a8040);border-color:#1a6030" onclick="doExportEverything()">📦 一键下载全部数据 ZIP</button>
+          </div>
+          <div id="admin-export-msg" style="margin-top:8px;font-size:12px;color:#6b5540"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- MAP -->
     <div class="panel" id="tab-map">
       <div class="map-stats">
@@ -665,7 +708,7 @@ function showScreen(name) {
 
 // ─── TABS ─────────────────────────────────────────────────
 function showTab(name) {
-  const tabNames = ['add','search','tree','photos','preface','pdf','map'];
+  const tabNames = ['add','search','tree','photos','preface','pdf','map','admin'];
   document.querySelectorAll('.tab').forEach((t, i) => {
     t.classList.toggle('active', tabNames[i] === name);
   });
@@ -735,6 +778,8 @@ async function loadUser(user) {
   }
   document.getElementById('user-nm').textContent = me.name;
   document.getElementById('user-av').textContent = me.name.charAt(0);
+  const adminBtn = document.getElementById('tab-btn-admin');
+  if (adminBtn) adminBtn.style.display = me.role === 'admin' ? '' : 'none';
 }
 
 // ─── LOAD DATA ────────────────────────────────────────────
@@ -747,7 +792,7 @@ async function loadAll() {
 async function loadMembers() {
   const { data, error } = await db.from('members').select('*').order('created_at');
   if (error) { toast('❌ 加载族员失败：' + error.message, true); return; }
-  members = (data || []).map(r => mapRow(r)); // FIX1: was missing birthDate/death/deathDate/mother
+  members = (data || []).map(r => mapRow(r));
   renderMembers();
   updateStats();
 }
@@ -807,18 +852,18 @@ async function doSaveMember() {
     const { data: updated, error } = await db.from('members')
       .update({...row, updated_at: new Date().toISOString()})
       .eq('id', editId)
-      .select(); // FIX-F2: detect silent RLS block (0 rows = no permission)
+      .select();
     if (error) { toast('❌ 更新失败：' + error.message, true); return; }
     if (!updated || updated.length === 0) { toast('❌ 无权限修改此记录', true); return; }
     const idx = members.findIndex(m => m.id === editId);
-    if (idx >= 0) members[idx] = mapRow(updated[0]); // BUG2-FIX: use actual DB row, not manual reconstruction
+    if (idx >= 0) members[idx] = mapRow(updated[0]);
     editId = null;
     document.getElementById('form-title').textContent = '新增族员信息';
     document.getElementById('save-btn').textContent = '＋ 保存至云端';
     toast('✓ 记录已更新：' + name);
   } else {
     // INSERT
-    if (!me) { toast('❌ 请先登录', true); return; } // guard: me could be null in edge cases
+    if (!me) { toast('❌ 请先登录', true); return; }
     const { data, error } = await db.from('members').insert({
       ...row, created_by: me.id, created_by_email: me.email
     }).select().single();
@@ -888,7 +933,7 @@ function doClearForm() {
 // Helper to switch tabs without needing the event object
 function showTab2(name) {
   document.querySelectorAll('.tab').forEach((t, i) => {
-    const names = ['add','search','tree','photos','preface','pdf','map']; // FIX2: added map
+    const names = ['add','search','tree','photos','preface','pdf','map','admin'];
     t.classList.toggle('active', names[i] === name);
   });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -1369,7 +1414,7 @@ function doZoom(f) {
 
 // ─── PHOTOS ───────────────────────────────────────────────
 async function doUploadPhotos(e) {
-  if (!me) { toast('❌ 请先登录', true); return; } // FIX-F3: guard against me being null
+  if (!me) { toast('❌ 请先登录', true); return; }
   const files = Array.from(e.target.files);
   for (const file of files) {
     const dataUrl = await readFile(file);
@@ -1393,17 +1438,20 @@ function readFile(file) {
 
 async function doAssignPhoto(pid, name) {
   const p = photos.find(x => x.id === pid); if (!p) return;
+  if (p.by !== me?.id && me?.role !== 'admin') { toast('❌ 只能修改自己上传的照片', true); return; }
   const { error } = await db.from('photos').update({ assigned_to: name }).eq('id', pid);
-  if (error) { toast('❌ 关联失败：' + error.message, true); return; } // FIX-F4: check before local update
-  p.to = name; // only update local state after DB confirms
+  if (error) { toast('❌ 关联失败：' + error.message, true); return; }
+  p.to = name;
   renderPhotos(); renderMembers();
   toast('已关联：' + name);
 }
 
 async function doDeletePhoto(pid) {
+  const p = photos.find(x => x.id === pid); if (!p) return;
+  if (p.by !== me?.id && me?.role !== 'admin') { toast('❌ 只能删除自己上传的照片', true); return; }
   const { error } = await db.from('photos').delete().eq('id', pid);
-  if (error) { toast('❌ 删除失败：' + error.message, true); return; } // FIX-F5: check before local update
-  photos = photos.filter(x => x.id !== pid); // only update local state after DB confirms
+  if (error) { toast('❌ 删除失败：' + error.message, true); return; }
+  photos = photos.filter(x => x.id !== pid);
   renderPhotos(); renderMembers();
   toast('照片已删除');
 }
@@ -1470,14 +1518,18 @@ function renderPhotos() {
   const opts = ['<option value="">— 关联族员 —</option>',
     ...allMembers().map(m => `<option value="${m.name}">${m.name}${m.virtual ? '（配偶）' : ''}</option>`)].join('');
   el.innerHTML = getSortedPhotos().map(p => {
-    const mbr = allMembers().find(m => m.name === p.to);
-    const sel = opts.replace(`value="${p.to}"`, `value="${p.to}" selected`);
+    const mbr  = allMembers().find(m => m.name === p.to);
+    const sel  = opts.replace(`value="${p.to}"`, `value="${p.to}" selected`);
+    const mine = p.by === me?.id || me?.role === 'admin';
     return `<div class="photo-item">
       <img src="${p.url}" alt="${p.to || p.name}">
-      <div class="photo-overlay"><div class="photo-name">${p.to || p.name}</div>
-        ${mbr ? `<div style="font-size:9px;color:rgba(245,217,154,.7)">${mbr.gen || ''}</div>` : ''}</div>
-      <div class="assign-sel"><select onchange="doAssignPhoto('${p.id}',this.value)">${sel}</select></div>
-      <button class="photo-del" onclick="doDeletePhoto('${p.id}')">✕</button>
+      <div class="photo-overlay">
+        <div class="photo-name">${p.to || p.name}</div>
+        ${mbr ? `<div style="font-size:9px;color:rgba(245,217,154,.7)">${mbr.gen || ''}</div>` : ''}
+        ${mine ? '' : '<div style="font-size:8px;color:rgba(245,217,154,.5);margin-top:2px">他人上传</div>'}
+      </div>
+      ${mine ? `<div class="assign-sel"><select onchange="doAssignPhoto('${p.id}',this.value)">${sel}</select></div>` : ''}
+      ${mine ? `<button class="photo-del" onclick="doDeletePhoto('${p.id}')">✕</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -2419,6 +2471,252 @@ function toast(msg, isErr) {
   if (toastTimer) clearTimeout(toastTimer);
   if (!isErr) toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
 }
+
+// ══════════════════════════════════════════════════════════
+// ADMIN FUNCTIONS (admin only — guarded by isAdmin())
+// ══════════════════════════════════════════════════════════
+
+function isAdmin() {
+  return me && me.role === 'admin';
+}
+
+function adminGuard() {
+  if (!isAdmin()) { toast('只能管理员操作', true); return false; }
+  return true;
+}
+
+// Load JSZip from CDN on demand
+function loadJSZip() {
+  return new Promise(function(res, rej) {
+    if (window.JSZip) { res(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload = res;
+    s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+// Sanitize filename — remove chars not safe in filenames
+function safeFilename(name) {
+  return name.replace(/[\\/:*<>|]/g, '_').replace(/\s+/g, '_');
+}
+
+// ── Download all photos as ZIP ───────────────────────────
+async function doDownloadPhotosZip() {
+  if (!adminGuard()) return;
+  if (!photos.length) { toast('暂无照片', true); return; }
+  var msg = document.getElementById('admin-photo-msg');
+  var cnt = document.getElementById('admin-photo-count');
+  msg.textContent = '正在加载打包工具...';
+  try { await loadJSZip(); } catch(e) { toast('JSZip 加载失败', true); return; }
+  var zip = new JSZip();
+  var folder = zip.folder('族员照片');
+  var count = 0;
+  msg.textContent = '正在打包照片...';
+  photos.forEach(function(p, i) {
+    if (!p.url) return;
+    var parts = p.url.split(',');
+    var mime = ((parts[0].match(/:(.*?);/) || [])[1]) || 'image/jpeg';
+    var ext = mime.split('/')[1] || 'jpg';
+    var b64 = parts[1];
+    var fname = safeFilename(p.to || p.name || ('photo_' + i)) + '.' + ext;
+    folder.file(fname, b64, { base64: true });
+    count++;
+  });
+  msg.textContent = '正在生成 ZIP（共 ' + count + ' 张）...';
+  var blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '丁氏家谱_族员照片_' + new Date().toISOString().slice(0, 10) + '.zip';
+  a.click();
+  URL.revokeObjectURL(url);
+  msg.textContent = '已下载 ' + count + ' 张照片';
+  if (cnt) cnt.textContent = '（共 ' + count + ' 张）';
+  toast('照片 ZIP 已下载（' + count + ' 张）');
+}
+
+// ── Export members as JSON ───────────────────────────────
+function doExportMembersJSON() {
+  if (!adminGuard()) return;
+  if (!members.length) { toast('暂无族员数据', true); return; }
+  var exportData = {
+    exported_at: new Date().toISOString(),
+    total: members.length,
+    members: members.map(function(m) {
+      return {
+        id: m.id, name: m.name, style: m.style, gender: m.gender,
+        birth: m.birth, birth_date: m.birthDate,
+        death: m.death, death_date: m.deathDate,
+        hometown: m.hometown, location: m.location,
+        father: m.father, mother: m.mother, spouse: m.spouse,
+        generation: m.gen, clan: m.clan,
+        occupation: m.job, notes: m.notes,
+        created_by_email: m.byEmail
+      };
+    })
+  };
+  var blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '丁氏家谱_族员数据_' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  toast('JSON 已下载（' + members.length + ' 人）');
+}
+
+// ── Export members as CSV ────────────────────────────────
+function doExportMembersCSV() {
+  if (!adminGuard()) return;
+  if (!members.length) { toast('暂无族员数据', true); return; }
+  var headers = ['姓名','字号','性别','出生年份','出生月份','去世年份','去世月份',
+                 '祖籍','现居地','父亲','母亲','配偶','辈分','堂号','职业','备注','录入者邮箱'];
+  function esc(v) { return '"' + String(v || '').replace(/"/g, '""') + '"'; }
+  var rows = members.map(function(m) {
+    return [
+      m.name, m.style,
+      m.gender === 'male' ? '男' : m.gender === 'female' ? '女' : '',
+      m.birth, m.birthDate, m.death, m.deathDate,
+      m.hometown, m.location, m.father, m.mother, m.spouse,
+      m.gen, m.clan, m.job, m.notes, m.byEmail
+    ].map(esc).join(',');
+  });
+  // BOM + header + rows joined with newline via array
+  var lines = [headers.map(esc).join(',')].concat(rows);
+  var csv = '\uFEFF' + lines.join('\n');
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '丁氏家谱_族员数据_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  toast('CSV 已下载（' + members.length + ' 人）');
+}
+
+// ── Export preface as TXT ────────────────────────────────
+function doExportPreface() {
+  if (!adminGuard()) return;
+  if (!pref.text) { toast('暂无序言内容', true); return; }
+  var lines = [];
+  if (pref.name) { lines.push(pref.name); lines.push(''); }
+  if (pref.year) { lines.push(pref.year + '续修'); lines.push(''); }
+  if (pref.anc)  { lines.push('始迁祖：' + pref.anc); lines.push(''); }
+  lines.push('══════════════════');
+  lines.push('');
+  lines.push(pref.text);
+  lines.push('');
+  lines.push('══════════════════');
+  lines.push('导出时间：' + new Date().toLocaleString('zh-CN'));
+  var blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '丁氏家谱_序言_' + new Date().toISOString().slice(0, 10) + '.txt';
+  a.click();
+  toast('序言已导出');
+}
+
+// ── Export EVERYTHING as one ZIP ─────────────────────────
+async function doExportEverything() {
+  if (!adminGuard()) return;
+  var msg = document.getElementById('admin-export-msg');
+  msg.textContent = '正在加载打包工具...';
+  try { await loadJSZip(); } catch(e) { toast('JSZip 加载失败', true); return; }
+  var zip = new JSZip();
+  msg.textContent = '正在打包族员数据...';
+
+  // 1. Members JSON
+  if (members.length) {
+    var exportData = {
+      exported_at: new Date().toISOString(),
+      total: members.length,
+      members: members.map(function(m) {
+        return {
+          id: m.id, name: m.name, style: m.style, gender: m.gender,
+          birth: m.birth, birth_date: m.birthDate,
+          death: m.death, death_date: m.deathDate,
+          hometown: m.hometown, location: m.location,
+          father: m.father, mother: m.mother, spouse: m.spouse,
+          generation: m.gen, clan: m.clan,
+          occupation: m.job, notes: m.notes,
+          created_by_email: m.byEmail
+        };
+      })
+    };
+    zip.file('族员数据.json', JSON.stringify(exportData, null, 2));
+  }
+
+  // 2. Members CSV
+  if (members.length) {
+    var headers = ['姓名','字号','性别','出生年份','出生月份','去世年份','去世月份',
+                   '祖籍','现居地','父亲','母亲','配偶','辈分','堂号','职业','备注','录入者邮箱'];
+    function esc2(v) { return '"' + String(v || '').replace(/"/g, '""') + '"'; }
+    var rows2 = members.map(function(m) {
+      return [
+        m.name, m.style,
+        m.gender === 'male' ? '男' : m.gender === 'female' ? '女' : '',
+        m.birth, m.birthDate, m.death, m.deathDate,
+        m.hometown, m.location, m.father, m.mother, m.spouse,
+        m.gen, m.clan, m.job, m.notes, m.byEmail
+      ].map(esc2).join(',');
+    });
+    var csvLines = [headers.map(esc2).join(',')].concat(rows2);
+    zip.file('族员数据.csv', '\uFEFF' + csvLines.join('\n'));
+  }
+
+  // 3. Preface TXT
+  if (pref.text) {
+    msg.textContent = '正在打包序言...';
+    var prefLines = [];
+    if (pref.name) { prefLines.push(pref.name); prefLines.push(''); }
+    if (pref.year) { prefLines.push(pref.year + '续修'); prefLines.push(''); }
+    if (pref.anc)  { prefLines.push('始迁祖：' + pref.anc); prefLines.push(''); }
+    prefLines.push(pref.text);
+    zip.file('家族序言.txt', prefLines.join('\n'));
+  }
+
+  // 4. Photos
+  if (photos.length) {
+    msg.textContent = '正在打包 ' + photos.length + ' 张照片...';
+    var photoFolder = zip.folder('族员照片');
+    photos.forEach(function(p, i) {
+      if (!p.url) return;
+      var parts = p.url.split(',');
+      var mime = ((parts[0].match(/:(.*?);/) || [])[1]) || 'image/jpeg';
+      var ext = mime.split('/')[1] || 'jpg';
+      var b64 = parts[1];
+      var fname = safeFilename(p.to || p.name || ('photo_' + i)) + '.' + ext;
+      photoFolder.file(fname, b64, { base64: true });
+    });
+  }
+
+  // 5. README
+  var readmeLines = [
+    '丁氏家谱系统 — 完整数据备份',
+    '导出时间：' + new Date().toLocaleString('zh-CN'),
+    '',
+    '文件说明：',
+    '  族员数据.json  — 完整族员数据（JSON格式）',
+    '  族员数据.csv   — 族员数据表格（可用Excel打开）',
+    '  家族序言.txt   — 家族序言文本',
+    '  族员照片/      — 全部族员照片（以族员姓名命名）',
+    '',
+    '统计：',
+    '  族员人数：' + members.length,
+    '  照片数量：' + photos.length
+  ];
+  zip.file('README.txt', readmeLines.join('\n'));
+
+  msg.textContent = '正在生成 ZIP 文件...';
+  var blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '丁氏家谱_完整备份_' + new Date().toISOString().slice(0, 10) + '.zip';
+  a.click();
+  URL.revokeObjectURL(url);
+  msg.textContent = '完整备份已下载（' + members.length + ' 族员，' + photos.length + ' 照片）';
+  toast('全量备份 ZIP 已下载');
+}
+
 </script>
 </body>
 </html>
