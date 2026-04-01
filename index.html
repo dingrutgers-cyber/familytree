@@ -1416,7 +1416,12 @@ function doZoom(f) {
 async function doUploadPhotos(e) {
   if (!me) { toast('❌ 请先登录', true); return; }
   const files = Array.from(e.target.files);
+  const MAX_BYTES = 800 * 1024; // 800KB limit — keeps base64 under ~1.1MB in DB
   for (const file of files) {
+    if (file.size > MAX_BYTES) {
+      toast('❌ ' + file.name + ' 超过800KB，请压缩后再上传', true);
+      continue;
+    }
     const dataUrl = await readFile(file);
     const { data, error } = await db.from('photos').insert({
       created_by: me.id, data_url: dataUrl,
@@ -1424,9 +1429,9 @@ async function doUploadPhotos(e) {
     }).select().single();
     if (error) { toast('❌ 上传失败：' + error.message, true); continue; }
     photos.push({ id: data.id, by: me.id, url: dataUrl, name: file.name, to: '' });
+    toast('✓ 已上传：' + file.name);
   }
   renderPhotos(); updateStats();
-  toast('✓ 已上传 ' + files.length + ' 张照片');
   e.target.value = '';
 }
 
@@ -2505,25 +2510,46 @@ function safeFilename(name) {
 // ── Download all photos as ZIP ───────────────────────────
 async function doDownloadPhotosZip() {
   if (!adminGuard()) return;
-  if (!photos.length) { toast('暂无照片', true); return; }
   var msg = document.getElementById('admin-photo-msg');
   var cnt = document.getElementById('admin-photo-count');
+  msg.textContent = '正在从数据库读取照片...';
+
+  // Always re-fetch fresh from DB to get full data_url
+  var { data: freshPhotos, error: fetchErr } = await db.from('photos').select('*').order('upload_time');
+  if (fetchErr) { toast('❌ 读取照片失败：' + fetchErr.message, true); return; }
+  if (!freshPhotos || !freshPhotos.length) { toast('数据库中暂无照片', true); msg.textContent = '数据库中暂无照片'; return; }
+
+  // Diagnostic: count how many have actual image data
+  var withData    = freshPhotos.filter(function(r) { return r.data_url && r.data_url.startsWith('data:'); });
+  var withoutData = freshPhotos.filter(function(r) { return !r.data_url || !r.data_url.startsWith('data:'); });
+
+  if (withoutData.length > 0) {
+    msg.textContent = '警告：' + withoutData.length + ' 张照片无图片数据（可能上传时失败），仅打包 ' + withData.length + ' 张有效照片';
+    if (!withData.length) {
+      toast('所有照片均无图片数据，请重新上传', true);
+      return;
+    }
+    await new Promise(function(r) { setTimeout(r, 2000); }); // show warning briefly
+  }
+
   msg.textContent = '正在加载打包工具...';
   try { await loadJSZip(); } catch(e) { toast('JSZip 加载失败', true); return; }
+
   var zip = new JSZip();
   var folder = zip.folder('族员照片');
   var count = 0;
-  msg.textContent = '正在打包照片...';
-  photos.forEach(function(p, i) {
-    if (!p.url) return;
-    var parts = p.url.split(',');
-    var mime = ((parts[0].match(/:(.*?);/) || [])[1]) || 'image/jpeg';
-    var ext = mime.split('/')[1] || 'jpg';
-    var b64 = parts[1];
-    var fname = safeFilename(p.to || p.name || ('photo_' + i)) + '.' + ext;
+  msg.textContent = '正在打包 ' + withData.length + ' 张照片...';
+
+  withData.forEach(function(r, i) {
+    var parts = r.data_url.split(',');
+    var mime  = ((parts[0].match(/:(.*?);/) || [])[1]) || 'image/jpeg';
+    var ext   = mime.split('/')[1] || 'jpg';
+    var b64   = parts[1];
+    var fname = safeFilename(r.assigned_to || r.file_name || ('photo_' + i)) + '.' + ext;
     folder.file(fname, b64, { base64: true });
     count++;
   });
+
   msg.textContent = '正在生成 ZIP（共 ' + count + ' 张）...';
   var blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
   var url = URL.createObjectURL(blob);
@@ -2673,18 +2699,22 @@ async function doExportEverything() {
     zip.file('家族序言.txt', prefLines.join('\n'));
   }
 
-  // 4. Photos
-  if (photos.length) {
-    msg.textContent = '正在打包 ' + photos.length + ' 张照片...';
+  // 4. Photos — re-fetch fresh from DB to ensure data_url is present
+  msg.textContent = '正在从数据库读取照片...';
+  var photoCount = 0;
+  var { data: freshPics } = await db.from('photos').select('*').order('upload_time');
+  var validPics = (freshPics || []).filter(function(r) { return r.data_url && r.data_url.startsWith('data:'); });
+  if (validPics.length) {
+    msg.textContent = '正在打包 ' + validPics.length + ' 张照片...';
     var photoFolder = zip.folder('族员照片');
-    photos.forEach(function(p, i) {
-      if (!p.url) return;
-      var parts = p.url.split(',');
-      var mime = ((parts[0].match(/:(.*?);/) || [])[1]) || 'image/jpeg';
-      var ext = mime.split('/')[1] || 'jpg';
-      var b64 = parts[1];
-      var fname = safeFilename(p.to || p.name || ('photo_' + i)) + '.' + ext;
+    validPics.forEach(function(r, i) {
+      var parts = r.data_url.split(',');
+      var mime  = ((parts[0].match(/:(.*?);/) || [])[1]) || 'image/jpeg';
+      var ext   = mime.split('/')[1] || 'jpg';
+      var b64   = parts[1];
+      var fname = safeFilename(r.assigned_to || r.file_name || ('photo_' + i)) + '.' + ext;
       photoFolder.file(fname, b64, { base64: true });
+      photoCount++;
     });
   }
 
@@ -2701,7 +2731,7 @@ async function doExportEverything() {
     '',
     '统计：',
     '  族员人数：' + members.length,
-    '  照片数量：' + photos.length
+    '  照片数量：' + photoCount
   ];
   zip.file('README.txt', readmeLines.join('\n'));
 
@@ -2713,7 +2743,7 @@ async function doExportEverything() {
   a.download = '丁氏家谱_完整备份_' + new Date().toISOString().slice(0, 10) + '.zip';
   a.click();
   URL.revokeObjectURL(url);
-  msg.textContent = '完整备份已下载（' + members.length + ' 族员，' + photos.length + ' 照片）';
+  msg.textContent = '完整备份已下载（' + members.length + ' 族员，' + photoCount + ' 照片）';
   toast('全量备份 ZIP 已下载');
 }
 
