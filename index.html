@@ -285,6 +285,54 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
 .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
 .toast.err{background:#6b1a1a;border-color:#c43a3a}
 
+/* ─── Tree photo tooltip ─── */
+#tree-photo-tip {
+  position:fixed;
+  display:none;
+  z-index:999;
+  pointer-events:none;
+  background:#1a0e05;
+  border:1.5px solid #c8882a;
+  border-radius:10px;
+  padding:8px;
+  box-shadow:0 6px 24px rgba(0,0,0,.45);
+  text-align:center;
+  min-width:100px;
+  max-width:160px;
+  transition:opacity .15s;
+}
+#tree-photo-tip img {
+  width:110px;
+  height:110px;
+  object-fit:cover;
+  border-radius:6px;
+  display:block;
+  margin:0 auto 5px;
+}
+#tree-photo-tip .tip-name {
+  font-size:12px;
+  font-weight:700;
+  color:#f5d99a;
+  letter-spacing:1px;
+}
+#tree-photo-tip .tip-gen {
+  font-size:10px;
+  color:rgba(200,136,42,.7);
+  margin-top:2px;
+}
+#tree-photo-tip .tip-no-photo {
+  width:110px;
+  height:110px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(200,136,42,.08);
+  border-radius:6px;
+  font-size:28px;
+  margin:0 auto 5px;
+  border:1px dashed rgba(200,136,42,.3);
+}
+
 /* ─── Misc ─── */
 .divider{height:1px;background:#ede0c8;margin:14px 0}
 .section-label{font-size:12px;color:#6b5540;letter-spacing:1px;
@@ -659,6 +707,13 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
     </div>
     <div class="modal-body" id="modal-body"></div>
   </div>
+</div>
+
+<!-- Tree photo tooltip -->
+<div id="tree-photo-tip">
+  <div id="tip-img-wrap"></div>
+  <div class="tip-name" id="tip-name"></div>
+  <div class="tip-gen" id="tip-gen"></div>
 </div>
 
 <!-- Toast -->
@@ -1370,8 +1425,9 @@ function renderTree() {
     const op     = isVirt ? 'opacity="0.85"' : '';
     const fn     = isVirt ? `promptAddSpouse('${m.name}','${m.spouseOf}')` : `openModal('${m.id}')`;
 
-    // Node box
-    h += `<g onclick="${fn}" style="cursor:pointer" ${op}>
+    // Node box — hover shows photo tooltip
+    const hoverFn = isVirt ? '' : `onmouseenter="showTreeTip(event,'${m.id}')" onmouseleave="hideTreeTip()"`;
+    h += `<g onclick="${fn}" style="cursor:pointer" ${op} ${hoverFn}>
       <rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="4"
         fill="${bg}" stroke="${stroke}" stroke-width="${mine?1.5:0.8}" ${dash}/>
       ${mine?`<rect x="${p.x}" y="${p.y}" width="${NW}" height="2.5" rx="1.5" fill="#c8882a"/>`:
@@ -2746,6 +2802,75 @@ async function doExportEverything() {
   msg.textContent = '完整备份已下载（' + members.length + ' 族员，' + photoCount + ' 照片）';
   toast('全量备份 ZIP 已下载');
 }
+
+// ── Tree photo tooltip ───────────────────────────────────
+function showTreeTip(evt, memberId) {
+  var tip  = document.getElementById('tree-photo-tip');
+  var wrap = document.getElementById('tip-img-wrap');
+  var nm   = document.getElementById('tip-name');
+  var gn   = document.getElementById('tip-gen');
+  if (!tip) return;
+
+  // Find member
+  var m = allMembers().find(function(x) { return String(x.id) === String(memberId); });
+  if (!m) return;
+
+  // Find photo
+  var ph = photos.find(function(p) { return p.to === m.name || p.name === m.name; });
+
+  // Build image area
+  if (ph && ph.url) {
+    wrap.innerHTML = '<img src="' + ph.url + '" alt="' + m.name + '">';
+  } else {
+    // No photo — show avatar initial with gender color
+    var bg  = m.gender === 'female' ? 'rgba(155,40,80,.15)' : 'rgba(50,80,150,.15)';
+    var col = m.gender === 'female' ? '#8a2a50' : '#2a4a8a';
+    wrap.innerHTML = '<div class="tip-no-photo" style="background:' + bg + ';color:' + col + '">'
+                   + m.name.charAt(0) + '</div>';
+  }
+
+  // Name + generation
+  nm.textContent = m.name + (m.style ? ' · ' + m.style : '');
+  gn.textContent = [m.gen, m.birth ? m.birth + '年' : '', m.death ? '— ' + m.death + '年' : '']
+                    .filter(Boolean).join('  ');
+
+  // Position: follow mouse, stay inside viewport
+  tip.style.display = 'block';
+  positionTreeTip(evt);
+}
+
+function positionTreeTip(evt) {
+  var tip = document.getElementById('tree-photo-tip');
+  if (!tip || tip.style.display === 'none') return;
+  var tw = tip.offsetWidth  || 160;
+  var th = tip.offsetHeight || 160;
+  var vw = window.innerWidth;
+  var vh = window.innerHeight;
+  var mx = evt.clientX;
+  var my = evt.clientY;
+  var offset = 16;
+
+  // Prefer right of cursor, flip left if near edge
+  var left = mx + offset;
+  if (left + tw > vw - 10) left = mx - tw - offset;
+
+  // Prefer below cursor, flip above if near bottom
+  var top = my + offset;
+  if (top + th > vh - 10) top = my - th - offset;
+
+  tip.style.left = left + 'px';
+  tip.style.top  = top  + 'px';
+}
+
+function hideTreeTip() {
+  var tip = document.getElementById('tree-photo-tip');
+  if (tip) tip.style.display = 'none';
+}
+
+// Keep tooltip following mouse while hovering over the SVG
+document.addEventListener('mousemove', function(evt) {
+  positionTreeTip(evt);
+});
 
 </script>
 </body>
