@@ -818,6 +818,7 @@ async function doSaveMember() {
     toast('✓ 记录已更新：' + name);
   } else {
     // INSERT
+    if (!me) { toast('❌ 请先登录', true); return; } // guard: me could be null in edge cases
     const { data, error } = await db.from('members').insert({
       ...row, created_by: me.id, created_by_email: me.email
     }).select().single();
