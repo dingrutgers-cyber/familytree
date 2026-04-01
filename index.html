@@ -180,8 +180,8 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
 .female{background:rgba(155,40,80,.1);color:#8a2a50;border:1px solid rgba(155,40,80,.2)}
 .member-name{font-size:14px;font-weight:700;color:#1a1209;margin-bottom:3px}
 .member-info{font-size:11px;color:#6b5540;line-height:1.5}
+.member-card.deceased{opacity:.82;background:linear-gradient(135deg,#f8f5f0,#f0ebe0)} /* FIX-CSS: moved out of .member-tag */
 .member-tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;
-.member-card.deceased{opacity:.82;background:linear-gradient(135deg,#f8f5f0,#f0ebe0)}
   margin-top:6px;background:rgba(200,136,42,.1);color:#7a5010;
   border:1px solid rgba(200,136,42,.25)}
 .del-btn{position:absolute;top:7px;right:7px;width:20px;height:20px;
@@ -747,13 +747,7 @@ async function loadAll() {
 async function loadMembers() {
   const { data, error } = await db.from('members').select('*').order('created_at');
   if (error) { toast('❌ 加载族员失败：' + error.message, true); return; }
-  members = (data || []).map(r => ({
-    id: r.id, by: r.created_by, byEmail: r.created_by_email,
-    name: r.name, style: r.style, gender: r.gender, birth: r.birth,
-    hometown: r.hometown, location: r.location, father: r.father_name,
-    spouse: r.spouse, gen: r.generation, clan: r.clan,
-    job: r.occupation, notes: r.notes
-  }));
+  members = (data || []).map(r => mapRow(r)); // FIX1: was missing birthDate/death/deathDate/mother
   renderMembers();
   updateStats();
 }
@@ -810,8 +804,12 @@ async function doSaveMember() {
 
   if (editId) {
     // UPDATE
-    const { error } = await db.from('members').update({...row, updated_at: new Date()}).eq('id', editId);
+    const { data: updated, error } = await db.from('members')
+      .update({...row, updated_at: new Date()})
+      .eq('id', editId)
+      .select(); // FIX-F2: detect silent RLS block (0 rows = no permission)
     if (error) { toast('❌ 更新失败：' + error.message, true); return; }
+    if (!updated || updated.length === 0) { toast('❌ 无权限修改此记录', true); return; }
     const idx = members.findIndex(m => m.id === editId);
     if (idx >= 0) members[idx] = { ...members[idx], ...mapRow({...row, id: editId, created_by: me.id}) };
     editId = null;
@@ -889,7 +887,7 @@ function doClearForm() {
 // Helper to switch tabs without needing the event object
 function showTab2(name) {
   document.querySelectorAll('.tab').forEach((t, i) => {
-    const names = ['add','search','tree','photos','preface','pdf'];
+    const names = ['add','search','tree','photos','preface','pdf','map']; // FIX2: added map
     t.classList.toggle('active', names[i] === name);
   });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -1370,6 +1368,7 @@ function doZoom(f) {
 
 // ─── PHOTOS ───────────────────────────────────────────────
 async function doUploadPhotos(e) {
+  if (!me) { toast('❌ 请先登录', true); return; } // FIX-F3: guard against me being null
   const files = Array.from(e.target.files);
   for (const file of files) {
     const dataUrl = await readFile(file);
@@ -1393,15 +1392,17 @@ function readFile(file) {
 
 async function doAssignPhoto(pid, name) {
   const p = photos.find(x => x.id === pid); if (!p) return;
-  p.to = name;
-  await db.from('photos').update({ assigned_to: name }).eq('id', pid);
+  const { error } = await db.from('photos').update({ assigned_to: name }).eq('id', pid);
+  if (error) { toast('❌ 关联失败：' + error.message, true); return; } // FIX-F4: check before local update
+  p.to = name; // only update local state after DB confirms
   renderPhotos(); renderMembers();
   toast('已关联：' + name);
 }
 
 async function doDeletePhoto(pid) {
-  await db.from('photos').delete().eq('id', pid);
-  photos = photos.filter(x => x.id !== pid);
+  const { error } = await db.from('photos').delete().eq('id', pid);
+  if (error) { toast('❌ 删除失败：' + error.message, true); return; } // FIX-F5: check before local update
+  photos = photos.filter(x => x.id !== pid); // only update local state after DB confirms
   renderPhotos(); renderMembers();
   toast('照片已删除');
 }
