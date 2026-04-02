@@ -360,6 +360,77 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
   margin-bottom:10px;display:flex;align-items:center;gap:7px}
 .section-label::after{content:'';flex:1;height:1px;background:#ede0c8}
 </style>
+
+<style>
+/* ─── Language toggle button ─── */
+#lang-btn {
+  padding:4px 10px;
+  border:1px solid rgba(200,136,42,.4);
+  background:transparent;
+  color:rgba(245,217,154,.8);
+  font-size:11px;
+  border-radius:6px;
+  cursor:pointer;
+  transition:all .15s;
+  font-weight:600;
+  letter-spacing:1px;
+}
+#lang-btn:hover { background:rgba(200,136,42,.15); color:#f5d99a; }
+
+/* ─── Timeline ─── */
+.timeline {
+  position:relative;
+  padding:8px 0 4px 28px;
+  margin-top:12px;
+}
+.timeline::before {
+  content:'';
+  position:absolute;
+  left:9px; top:0; bottom:0;
+  width:2px;
+  background:linear-gradient(180deg,#c8882a,rgba(200,136,42,.2));
+  border-radius:1px;
+}
+.tl-item {
+  position:relative;
+  margin-bottom:14px;
+}
+.tl-item::before {
+  content:'';
+  position:absolute;
+  left:-23px; top:4px;
+  width:10px; height:10px;
+  border-radius:50%;
+  border:2px solid #c8882a;
+  background:white;
+}
+.tl-item.tl-birth::before  { background:#c8882a; }
+.tl-item.tl-death::before  { background:#555; border-color:#555; }
+.tl-item.tl-marry::before  { background:#c43a3a; border-color:#c43a3a; }
+.tl-item.tl-move::before   { background:#2563eb; border-color:#2563eb; }
+.tl-year {
+  font-size:10px; color:#6b5540; margin-bottom:1px;
+}
+.tl-event {
+  font-size:12px; font-weight:600; color:#1a1209;
+}
+.tl-detail {
+  font-size:11px; color:#6b5540; margin-top:1px;
+}
+/* Modal tabs */
+.modal-tabs {
+  display:flex; border-bottom:1px solid #ede0c8;
+  margin:-4px -20px 14px; padding:0 20px;
+}
+.modal-tab {
+  padding:8px 14px; font-size:12px; cursor:pointer;
+  color:#6b5540; border-bottom:2px solid transparent;
+  transition:all .15s; user-select:none;
+}
+.modal-tab.active { color:#c8882a; border-bottom-color:#c8882a; font-weight:600; }
+.modal-pane { display:none; }
+.modal-pane.active { display:block; }
+</style>
 </head>
 <body>
 
@@ -462,18 +533,19 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
           <div class="top-user-avatar" id="user-av">?</div>
           <div class="top-user-name" id="user-nm">…</div>
         </div>
-        <button class="btn-logout" onclick="doLogout()">退出</button>
+        <button id="lang-btn" onclick="toggleLang()">EN</button>
+        <button class="btn-logout" onclick="doLogout()" id="btn-logout">退出</button>
       </div>
     </div>
     <!-- Tabs -->
     <div class="tabs">
-      <div class="tab active" onclick="showTab('add')">✦ 录入族员</div>
-      <div class="tab" onclick="showTab('search')">⊙ 检索查询</div>
-      <div class="tab" onclick="showTab('tree')">❖ 族谱图谱</div>
-      <div class="tab" onclick="showTab('photos')">◉ 族员照片</div>
-      <div class="tab" onclick="showTab('preface')">卷 家族序言</div>
-      <div class="tab" onclick="showTab('pdf')">⬇ 导出PDF</div>
-      <div class="tab" onclick="showTab('map')">🗺 族人分布</div>
+      <div class="tab active" onclick="showTab('add')"    data-zh="✦ 录入族员" data-en="✦ Add Member">✦ 录入族员</div>
+      <div class="tab" onclick="showTab('search')"        data-zh="⊙ 检索查询" data-en="⊙ Search">⊙ 检索查询</div>
+      <div class="tab" onclick="showTab('tree')"          data-zh="❖ 族谱图谱" data-en="❖ Tree">❖ 族谱图谱</div>
+      <div class="tab" onclick="showTab('photos')"        data-zh="◉ 族员照片" data-en="◉ Photos">◉ 族员照片</div>
+      <div class="tab" onclick="showTab('preface')"       data-zh="卷 家族序言" data-en="卷 Preface">卷 家族序言</div>
+      <div class="tab" onclick="showTab('pdf')"           data-zh="⬇ 导出PDF"  data-en="⬇ Export PDF">⬇ 导出PDF</div>
+      <div class="tab" onclick="showTab('map')"           data-zh="🗺 族人分布" data-en="🗺 Map">🗺 族人分布</div>
       <div class="tab" id="tab-btn-admin" onclick="showTab('admin')" style="display:none">🔐 管理员</div>
     </div>
   </div>
@@ -492,24 +564,24 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
       <div class="card">
         <div class="card-title" id="form-title">新增族员信息</div>
         <div class="form-grid">
-          <div class="form-group"><label>姓名 *</label><input id="f-name" placeholder="例：张明远"></div>
-          <div class="form-group"><label>字号</label><input id="f-style" placeholder="例：子涵"></div>
-          <div class="form-group"><label>性别 *</label>
+          <div class="form-group"><label data-lk="fname">姓名 *</label><input id="f-name" placeholder="例：张明远"></div>
+          <div class="form-group"><label data-lk="fstyle">字号</label><input id="f-style" placeholder="例：子涵"></div>
+          <div class="form-group"><label data-lk="fgender">性别 *</label>
             <select id="f-gender"><option value="">— 选择 —</option>
               <option value="male">男</option><option value="female">女</option></select></div>
-          <div class="form-group"><label>出生年份</label><input id="f-birth" placeholder="例：1958 或 民国47年"></div>
-          <div class="form-group"><label>出生月份</label><input id="f-birth-date" placeholder="例：1958年3月"></div>
-          <div class="form-group"><label>去世年份</label><input id="f-death" placeholder="例：2005（在世请留空）"></div>
-          <div class="form-group"><label>去世月份</label><input id="f-death-date" placeholder="例：2005年7月"></div>
-          <div class="form-group"><label>祖籍</label><input id="f-hometown" placeholder="例：湖南省 长沙县"></div>
-          <div class="form-group"><label>现居地</label><input id="f-location" placeholder="例：广东省 深圳市"></div>
-          <div class="form-group"><label>父亲姓名</label><input id="f-father" placeholder="建立父子关联"></div>
-          <div class="form-group"><label>母亲姓名</label><input id="f-mother" placeholder="母亲姓名"></div>
-          <div class="form-group"><label>配偶姓名</label><input id="f-spouse" placeholder="配偶姓名"></div>
-          <div class="form-group"><label>辈分</label><input id="f-gen" placeholder="例：第五世 / 仁字辈"></div>
-          <div class="form-group"><label>堂号</label><input id="f-clan" placeholder="例：清河堂"></div>
-          <div class="form-group full"><label>职业 / 成就</label><input id="f-job" placeholder="例：教师、企业家"></div>
-          <div class="form-group full"><label>备注 / 传记</label>
+          <div class="form-group"><label data-lk="fbirth">出生年份</label><input id="f-birth" placeholder="例：1958 或 民国47年"></div>
+          <div class="form-group"><label data-lk="fbirthd">出生月份</label><input id="f-birth-date" placeholder="例：1958年3月"></div>
+          <div class="form-group"><label data-lk="fdeath">去世年份</label><input id="f-death" placeholder="例：2005（在世请留空）"></div>
+          <div class="form-group"><label data-lk="fdeathd">去世月份</label><input id="f-death-date" placeholder="例：2005年7月"></div>
+          <div class="form-group"><label data-lk="fhome">祖籍</label><input id="f-hometown" placeholder="例：湖南省 长沙县"></div>
+          <div class="form-group"><label data-lk="floc">现居地</label><input id="f-location" placeholder="例：广东省 深圳市"></div>
+          <div class="form-group"><label data-lk="ffather">父亲姓名</label><input id="f-father" placeholder="建立父子关联"></div>
+          <div class="form-group"><label data-lk="fmother">母亲姓名</label><input id="f-mother" placeholder="母亲姓名"></div>
+          <div class="form-group"><label data-lk="fspouse">配偶姓名</label><input id="f-spouse" placeholder="配偶姓名"></div>
+          <div class="form-group"><label data-lk="fgen">辈分</label><input id="f-gen" placeholder="例：第五世 / 仁字辈"></div>
+          <div class="form-group"><label data-lk="fclan">堂号</label><input id="f-clan" placeholder="例：清河堂"></div>
+          <div class="form-group full"><label data-lk="fjob">职业 / 成就</label><input id="f-job" placeholder="例：教师、企业家"></div>
+          <div class="form-group full"><label data-lk="fnotes">备注 / 传记</label>
             <textarea id="f-notes" placeholder="人物事迹、迁徙记录……"></textarea></div>
         </div>
         <div class="btn-row">
@@ -517,7 +589,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
           <button class="btn btn-secondary" onclick="doClearForm()">清空</button>
         </div>
       </div>
-      <div class="section-label">全部族员</div>
+      <div class="section-label" data-lk="allMembers">全部族员</div>
       <div class="member-grid" id="members-list">
         <div class="empty"><div class="empty-icon">📜</div>
           <h3>暂无族员记录</h3><p>从上方表单录入第一位族员</p></div>
@@ -527,7 +599,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
     <!-- SEARCH -->
     <div class="panel" id="tab-search">
       <div class="card">
-        <div class="card-title">族员检索</div>
+        <div class="card-title" data-lk="tabSearch">族员检索</div>
         <div class="search-row">
           <input id="search-q" placeholder="输入姓名、祖籍、堂号…" oninput="doSearch()">
           <button class="search-btn" onclick="doSearch()">搜索</button>
@@ -535,10 +607,10 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
         <div class="member-grid" id="search-results"></div>
       </div>
       <div class="card">
-        <div class="card-title">关系推导</div>
+        <div class="card-title" data-lk="relationTitle">关系推导</div>
         <div class="form-grid">
-          <div class="form-group"><label>族员甲</label><input id="rel-a" placeholder="姓名"></div>
-          <div class="form-group"><label>族员乙</label><input id="rel-b" placeholder="姓名"></div>
+          <div class="form-group"><label data-lk="memberA">族员甲</label><input id="rel-a" placeholder="姓名"></div>
+          <div class="form-group"><label data-lk="memberB">族员乙</label><input id="rel-b" placeholder="姓名"></div>
         </div>
         <div class="btn-row">
           <button class="btn btn-primary" onclick="doRelation()">推算关系</button>
@@ -551,12 +623,14 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
     <div class="panel" id="tab-tree">
       <div class="tree-box">
         <div class="tree-bar">
-          <h3>族谱图谱</h3>
+          <h3 data-lk="treeTitle">族谱图谱</h3>
           <button class="zoom-btn" onclick="doZoom(1.2)">＋</button>
           <button class="zoom-btn" onclick="doZoom(0.83)">－</button>
           <button class="zoom-btn" onclick="doZoom(1)" style="font-size:10px;width:36px">重置</button>
           <button class="btn btn-secondary" style="padding:4px 10px;font-size:11px"
-                  onclick="renderTree()">刷新</button>
+                  onclick="renderTree()" data-zh="刷新" data-en="Refresh">刷新</button>
+          <button class="btn btn-secondary" style="padding:4px 10px;font-size:11px"
+                  onclick="exportTreeImage()" data-zh="📷 导出图片" data-en="📷 Export Image">📷 导出图片</button>
         </div>
         <div id="tree-wrap"><svg id="tree-svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
       </div>
@@ -565,7 +639,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
     <!-- PHOTOS -->
     <div class="panel" id="tab-photos">
       <div class="card">
-        <div class="card-title">上传照片</div>
+        <div class="card-title" data-lk="uploadTitle">上传照片</div>
         <div class="upload-zone" onclick="document.getElementById('photo-file-input').click()">
           <input type="file" id="photo-file-input" accept="image/*" multiple
                  style="display:none" onchange="doUploadPhotos(event)">
@@ -580,14 +654,14 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
         </div>
       </div>
       <div class="card">
-        <div class="card-title">排序</div>
+        <div class="card-title" data-lk="sortTitle">排序</div>
         <div class="btn-row" style="margin-top:0">
           <button class="btn btn-secondary" onclick="doSortPhotos('gen')">按辈分</button>
           <button class="btn btn-secondary" onclick="doSortPhotos('birth')">按出生年</button>
           <button class="btn btn-secondary" onclick="doSortPhotos('name')">按姓名</button>
         </div>
       </div>
-      <div class="section-label">照片库</div>
+      <div class="section-label" data-lk="photoLib">照片库</div>
       <div class="photo-grid" id="photo-grid">
         <div class="empty" style="grid-column:1/-1">
           <div class="empty-icon">🖼️</div>
@@ -598,22 +672,22 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
     <!-- PREFACE -->
     <div class="panel" id="tab-preface">
       <div class="card">
-        <div class="card-title">家族序言</div>
+        <div class="card-title" data-lk="prefaceTitle">家族序言</div>
         <div class="form-grid" style="margin-bottom:12px">
           <div class="form-group">
-            <label>家族名称</label>
+            <label data-lk="clanName">家族名称</label>
             <input id="pref-name" placeholder="例：清河张氏" oninput="previewPreface()">
           </div>
           <div class="form-group">
-            <label>编修年份</label>
+            <label data-lk="editYear">编修年份</label>
             <input id="pref-year" placeholder="例：2025年" oninput="previewPreface()">
           </div>
           <div class="form-group full">
-            <label>始迁祖</label>
+            <label data-lk="ancestor">始迁祖</label>
             <input id="pref-anc" placeholder="例：始祖张德厚，清道光年间自湖南长沙迁居…" oninput="previewPreface()">
           </div>
           <div class="form-group full">
-            <label>序言正文</label>
+            <label data-lk="prefaceText">序言正文</label>
             <textarea id="pref-text" style="min-height:160px"
               placeholder="盖闻水有源，树有根，人有祖……" oninput="previewPreface()"></textarea>
           </div>
@@ -624,7 +698,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
         </div>
       </div>
       <div class="card">
-        <div class="card-title">预览</div>
+        <div class="card-title" data-lk="preview">预览</div>
         <div class="preface-preview" id="pref-preview">序言将在此显示…</div>
       </div>
     </div>
@@ -720,9 +794,9 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
     <!-- MAP -->
     <div class="panel" id="tab-map">
       <div class="map-stats">
-        <div class="map-stat"><strong id="map-stat-cities">0</strong>城市</div>
-        <div class="map-stat"><strong id="map-stat-provinces">0</strong>省份</div>
-        <div class="map-stat"><strong id="map-stat-countries">0</strong>国家/地区</div>
+        <div class="map-stat"><strong id="map-stat-cities">0</strong><span data-lk="cities">城市</span></div>
+        <div class="map-stat"><strong id="map-stat-provinces">0</strong><span data-lk="provinces">省份</span></div>
+        <div class="map-stat"><strong id="map-stat-countries">0</strong><span data-lk="countries">国家/地区</span></div>
       </div>
       <div class="map-legend">
         <span><span class="legend-dot" style="background:#2563eb"></span>现居地</span>
@@ -760,8 +834,8 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
 
 <script>
 // ─── CONFIG ───────────────────────────────────────────────
-const SB_URL = 'https://jpdabrokzkesnxceybcx.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpwZGFicm9remtlc254Y2V5YmN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxMzYxNTYsImV4cCI6MjA5MDcxMjE1Nn0.zQb3HlQ_clqCFuH3CPeJcmtKiegrf05rWP-AUbsxPO0';
+const SB_URL = 'https://zrlqijlnlhahdpudojov.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpybHFpamxubGhhaGRwdWRvam92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NzE4NDAsImV4cCI6MjA5MDE0Nzg0MH0.HCcDEVCdVUOrTei-dFjAXA7paiC-Elo0vmlHqsaO2rI';
 
 // ─── STATE ────────────────────────────────────────────────
 let db, me, members = [], photos = [], pref = {};
@@ -879,6 +953,8 @@ async function loadUser(user) {
   document.getElementById('user-av').textContent = me.name.charAt(0);
   const adminBtn = document.getElementById('tab-btn-admin');
   if (adminBtn) adminBtn.style.display = me.role === 'admin' ? '' : 'none';
+  // Apply saved language preference
+  if (typeof applyLang === 'function') applyLang();
 }
 
 // ─── LOAD DATA ────────────────────────────────────────────
@@ -1888,7 +1964,7 @@ table.gt td{
   width:100%;
 }
 .vt-name{font-size:13pt;font-weight:700;letter-spacing:1pt}
-.vt-cross{font-size:8pt;color:#999;display:block;text-align:center;margin-bottom:2pt}
+.vt-cross{font-size:7pt;color:#aaa;display:block;text-align:center;margin-top:2pt;letter-spacing:0}
 .vt-info{font-size:10pt;color:#3d2e1a;letter-spacing:0.5pt}
 .vt-info.dead{color:#666}
 /* Photos */
@@ -1901,7 +1977,78 @@ table.gt td{
 
   // Cover
   let html=`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
-<title>${clanName}</title><style>${css}</style></head><body>
+<title>${clanName}</title><style>${css}</style>
+<style>
+/* ─── Language toggle button ─── */
+#lang-btn {
+  padding:4px 10px;
+  border:1px solid rgba(200,136,42,.4);
+  background:transparent;
+  color:rgba(245,217,154,.8);
+  font-size:11px;
+  border-radius:6px;
+  cursor:pointer;
+  transition:all .15s;
+  font-weight:600;
+  letter-spacing:1px;
+}
+#lang-btn:hover { background:rgba(200,136,42,.15); color:#f5d99a; }
+
+/* ─── Timeline ─── */
+.timeline {
+  position:relative;
+  padding:8px 0 4px 28px;
+  margin-top:12px;
+}
+.timeline::before {
+  content:'';
+  position:absolute;
+  left:9px; top:0; bottom:0;
+  width:2px;
+  background:linear-gradient(180deg,#c8882a,rgba(200,136,42,.2));
+  border-radius:1px;
+}
+.tl-item {
+  position:relative;
+  margin-bottom:14px;
+}
+.tl-item::before {
+  content:'';
+  position:absolute;
+  left:-23px; top:4px;
+  width:10px; height:10px;
+  border-radius:50%;
+  border:2px solid #c8882a;
+  background:white;
+}
+.tl-item.tl-birth::before  { background:#c8882a; }
+.tl-item.tl-death::before  { background:#555; border-color:#555; }
+.tl-item.tl-marry::before  { background:#c43a3a; border-color:#c43a3a; }
+.tl-item.tl-move::before   { background:#2563eb; border-color:#2563eb; }
+.tl-year {
+  font-size:10px; color:#6b5540; margin-bottom:1px;
+}
+.tl-event {
+  font-size:12px; font-weight:600; color:#1a1209;
+}
+.tl-detail {
+  font-size:11px; color:#6b5540; margin-top:1px;
+}
+/* Modal tabs */
+.modal-tabs {
+  display:flex; border-bottom:1px solid #ede0c8;
+  margin:-4px -20px 14px; padding:0 20px;
+}
+.modal-tab {
+  padding:8px 14px; font-size:12px; cursor:pointer;
+  color:#6b5540; border-bottom:2px solid transparent;
+  transition:all .15s; user-select:none;
+}
+.modal-tab.active { color:#c8882a; border-bottom-color:#c8882a; font-weight:600; }
+.modal-pane { display:none; }
+.modal-pane.active { display:block; }
+</style>
+</head><body>
 <div class="cover">
   <div class="seal"><div class="seal-ch">丁</div></div>
   <h1>${clanName}</h1>
@@ -2011,7 +2158,7 @@ table.gt td{
           const isLast=(i===chunk.length-1);
           html+=`<td class="nc${deadCls}${mineCls}">
             <span class="vt vt-name" style="${nameColor}">
-              ${dead?'<span class="vt-cross">✝</span>':''}${m.name}
+              ${m.name}${dead?'<span class="vt-cross">✝</span>':''}
             </span>
           </td>
           <td class="ic${deadCls}${isLast?'':' sep'}" style="width:${infoWidths[i]}pt">
@@ -2961,6 +3108,336 @@ function hideTreeTip() {
 document.addEventListener('mousemove', function(evt) {
   positionTreeTip(evt);
 });
+
+// ══════════════════════════════════════════════════════════
+// MULTILINGUAL SYSTEM (中文 / English)
+// ══════════════════════════════════════════════════════════
+var curLang = localStorage.getItem('ding_lang') || 'zh';
+
+var LANG = {
+  zh: {
+    // Auth
+    emailPlaceholder: 'name@example.com',
+    sendLink: '发送登录链接',
+    sending: '发送中…',
+    loginTitle: '丁氏家谱系统',
+    loginSub: '丁氏一脉 · 血脉相承',
+    emailLabel: '你的邮箱地址',
+    loginNote: '输入邮箱 → 点按钮 → 去邮箱点链接 → 自动登录',
+    loginNoteSub: '首次使用会自动注册，无需单独注册',
+    hasPassword: '已有密码？',
+    usePassword: '用密码登录',
+    sentTitle: '链接已发送！',
+    sentSub1: '请检查邮箱',
+    sentSub2: '点击邮件中的链接即可登录',
+    sentSub3: '没收到？检查垃圾邮件夹，或等30秒后重试',
+    reenter: '重新输入邮箱',
+    pwdLabel: '密码',
+    pwdPlaceholder: '你的密码',
+    loginBtn: '登 入',
+    backToEmail: '← 用邮箱链接登录',
+    // Top bar
+    subtitle: '丁氏一脉 · 血脉相承 · 云端同步',
+    statMembers: '族员',
+    statGen: '世代',
+    logout: '退出',
+    // Tabs
+    tabAdd: '✦ 录入族员',
+    tabSearch: '⊙ 检索查询',
+    tabTree: '❖ 族谱图谱',
+    tabPhotos: '◉ 族员照片',
+    tabPreface: '卷 家族序言',
+    tabPDF: '⬇ 导出PDF',
+    tabMap: '🗺 族人分布',
+    tabAdmin: '🔐 管理员',
+    // Add member form
+    formTitle: '新增族员信息',
+    fname: '姓名 *', fstyle: '字号', fgender: '性别 *',
+    fbirth: '出生年份', fbirthd: '出生月份',
+    fdeath: '去世年份', fdeathd: '去世月份',
+    fhome: '祖籍', floc: '现居地',
+    ffather: '父亲姓名', fmother: '母亲姓名', fspouse: '配偶姓名',
+    fgen: '辈分', fclan: '堂号', fjob: '职业 / 成就', fnotes: '备注 / 传记',
+    genderM: '男', genderF: '女', genderSel: '— 选择 —',
+    saveBtn: '＋ 保存至云端', clearBtn: '清空',
+    allMembers: '全部族员',
+    // Search
+    searchPlaceholder: '输入姓名、祖籍、堂号…',
+    searchBtn: '搜索',
+    relationTitle: '关系推导',
+    memberA: '族员甲', memberB: '族员乙',
+    calcBtn: '推算关系',
+    // Tree
+    treeTitle: '族谱图谱',
+    refresh: '刷新', exportImg: '📷 导出图片',
+    // Photos
+    uploadTitle: '上传照片', uploadHint: '点击上传族员照片',
+    uploadSub: '支持 JPG、PNG，可批量上传', choosePhoto: '选择照片',
+    sortTitle: '排序', sortGen: '按辈分', sortBirth: '按出生年', sortName: '按姓名',
+    photoLib: '照片库', noPhotos: '尚无照片', noPhotosSub: '上传后按辈分自动排列',
+    // Member card labels
+    hometown: '籍贯', father: '父', mother: '母',
+    myRecord: '我录入', othersRecord: '他人录入', deceased: '已故', spouse2: '配偶（未录入）',
+    // Modal
+    gender2: '性别', birthY: '出生年份', birthM: '出生月份',
+    deathY: '去世年份', deathM: '去世月份', lifespan: '享年',
+    hometown2: '祖籍', location: '现居地', father2: '父亲', mother2: '母亲',
+    spouse3: '配偶', gen2: '辈分', clan2: '堂号', job2: '职业',
+    editBtn: '✏️ 修改', deleteBtn: '删除', inputBy: '录入者',
+    notMine: '此记录由他人录入，如需修改请联系',
+    // Preface
+    prefaceTitle: '家族序言', clanName: '家族名称', editYear: '编修年份',
+    ancestor: '始迁祖', prefaceText: '序言正文',
+    genDraft: '✦ 自动生成草稿', savePreface: '保存序言',
+    preview: '预览', prefacePreviewHint: '序言将在此显示…',
+    // PDF
+    pdfTitle: '家族族谱', pdfSub: '点击下方按钮生成 PDF 副本',
+    pdfSettings: 'PDF 设置',
+    inclPreface: '✦ 家族序言', inclPrefaceDesc: '家族介绍，谱首第一页',
+    inclList: '⊙ 族员名录', inclListDesc: '按辈分排列全部族员',
+    inclTree: '❖ 世系关系', inclTreeDesc: '父子传承关系说明',
+    inclPhotos2: '◉ 族员照片', inclPhotosDesc: '按辈分排序照片集',
+    pdfClan: '家族名称', pdfEd: '版次说明',
+    genPDF: '⬇ 生成并下载 PDF',
+    // Map
+    cities: '城市', provinces: '省份', countries: '国家/地区',
+    mapLegend: '现居地', mapHint: '数字 = 该地族人数量，点击查看详情',
+    mapTip: '💡 地图根据「现居地」字段自动定位。填写越详细定位越准确，如：广东省 深圳市 南山区。',
+    // Admin
+    adminTitle: '🔐 管理员专区',
+    adminNote: '此功能仅限管理员使用。所有下载均包含完整数据。',
+    downloadPhotos: '照片下载', batchDownload: '◉ 批量下载照片',
+    batchDownloadDesc: '将所有已上传照片打包为 ZIP 文件下载到本地。照片以「族员姓名」命名。',
+    downloadZip: '📦 下载全部照片 ZIP',
+    dataExport: '数据导出', exportMembers: '⊙ 导出族员数据',
+    exportMembersDesc: '导出所有族员记录，可用于备份或迁移。',
+    exportJSON: '⬇ 导出 JSON', exportCSV: '⬇ 导出 CSV',
+    exportPrefaceTitle: '卷 导出序言',
+    exportPrefaceDesc: '导出家族序言内容为文本文件。',
+    exportTXT: '⬇ 导出序言 TXT',
+    exportAll: '📦 一键导出全部数据',
+    exportAllDesc: '将族员数据（JSON + CSV）、序言、全部照片打包为一个 ZIP 文件。完整备份。',
+    exportAllBtn: '📦 一键下载全部数据 ZIP',
+  },
+  en: {
+    emailPlaceholder: 'name@example.com',
+    sendLink: 'Send Login Link',
+    sending: 'Sending…',
+    loginTitle: 'Ding Family Tree',
+    loginSub: 'Ding Clan · Heritage & Legacy',
+    emailLabel: 'Your Email Address',
+    loginNote: 'Enter email → Click button → Check inbox → Auto login',
+    loginNoteSub: 'First time? You\'ll be registered automatically.',
+    hasPassword: 'Have a password?',
+    usePassword: 'Login with password',
+    sentTitle: 'Link Sent!',
+    sentSub1: 'Check your inbox',
+    sentSub2: 'Click the link in the email to log in',
+    sentSub3: 'Not received? Check spam, or wait 30s and retry',
+    reenter: 'Re-enter Email',
+    pwdLabel: 'Password',
+    pwdPlaceholder: 'Your password',
+    loginBtn: 'Login',
+    backToEmail: '← Use email link',
+    subtitle: 'Ding Clan · Heritage · Cloud Sync',
+    statMembers: 'Members',
+    statGen: 'Generations',
+    logout: 'Logout',
+    tabAdd: '✦ Add Member',
+    tabSearch: '⊙ Search',
+    tabTree: '❖ Family Tree',
+    tabPhotos: '◉ Photos',
+    tabPreface: '卷 Preface',
+    tabPDF: '⬇ Export PDF',
+    tabMap: '🗺 Map',
+    tabAdmin: '🔐 Admin',
+    formTitle: 'Add Member',
+    fname: 'Name *', fstyle: 'Style Name', fgender: 'Gender *',
+    fbirth: 'Birth Year', fbirthd: 'Birth Month',
+    fdeath: 'Death Year', fdeathd: 'Death Month',
+    fhome: 'Hometown', floc: 'Current Location',
+    ffather: 'Father\'s Name', fmother: 'Mother\'s Name', fspouse: 'Spouse\'s Name',
+    fgen: 'Generation', fclan: 'Clan Hall', fjob: 'Occupation', fnotes: 'Notes / Biography',
+    genderM: 'Male', genderF: 'Female', genderSel: '— Select —',
+    saveBtn: '＋ Save to Cloud', clearBtn: 'Clear',
+    allMembers: 'All Members',
+    searchPlaceholder: 'Name, hometown, clan hall…',
+    searchBtn: 'Search',
+    relationTitle: 'Relationship Finder',
+    memberA: 'Person A', memberB: 'Person B',
+    calcBtn: 'Calculate Relationship',
+    treeTitle: 'Family Tree',
+    refresh: 'Refresh', exportImg: '📷 Export Image',
+    uploadTitle: 'Upload Photos', uploadHint: 'Click to upload member photos',
+    uploadSub: 'JPG, PNG supported, batch upload OK', choosePhoto: 'Choose Photos',
+    sortTitle: 'Sort', sortGen: 'By Generation', sortBirth: 'By Birth Year', sortName: 'By Name',
+    photoLib: 'Photo Library', noPhotos: 'No photos yet', noPhotosSub: 'Upload and they\'ll be sorted by generation',
+    hometown: 'Hometown', father: 'Father', mother: 'Mother',
+    myRecord: 'My record', othersRecord: "Other's record", deceased: 'Deceased', spouse2: 'Spouse (not entered)',
+    gender2: 'Gender', birthY: 'Birth Year', birthM: 'Birth Month',
+    deathY: 'Death Year', deathM: 'Death Month', lifespan: 'Age at Death',
+    hometown2: 'Hometown', location: 'Location', father2: 'Father', mother2: 'Mother',
+    spouse3: 'Spouse', gen2: 'Generation', clan2: 'Clan Hall', job2: 'Occupation',
+    editBtn: '✏️ Edit', deleteBtn: 'Delete', inputBy: 'Added by',
+    notMine: 'Record added by others. To edit, contact:',
+    prefaceTitle: 'Family Preface', clanName: 'Clan Name', editYear: 'Year of Compilation',
+    ancestor: 'Founding Ancestor', prefaceText: 'Preface Text',
+    genDraft: '✦ Auto-generate Draft', savePreface: 'Save Preface',
+    preview: 'Preview', prefacePreviewHint: 'Preface will appear here…',
+    pdfTitle: 'Family Genealogy', pdfSub: 'Click below to generate a PDF copy',
+    pdfSettings: 'PDF Settings',
+    inclPreface: '✦ Family Preface', inclPrefaceDesc: 'Introduction, first page of genealogy',
+    inclList: '⊙ Member Registry', inclListDesc: 'All members sorted by generation',
+    inclTree: '❖ Lineage', inclTreeDesc: 'Father-child relationship overview',
+    inclPhotos2: '◉ Member Photos', inclPhotosDesc: 'Photos sorted by generation',
+    pdfClan: 'Clan Name', pdfEd: 'Edition',
+    genPDF: '⬇ Generate & Download PDF',
+    cities: 'Cities', provinces: 'Provinces', countries: 'Countries',
+    mapLegend: 'Current Location', mapHint: 'Number = members in that location. Click for details.',
+    mapTip: '💡 Map auto-locates based on "Current Location" field. More detail = better accuracy.',
+    adminTitle: '🔐 Admin Panel',
+    adminNote: 'Admin only. All downloads include complete data.',
+    downloadPhotos: 'Photo Downloads', batchDownload: '◉ Batch Download Photos',
+    batchDownloadDesc: 'Package all uploaded photos as ZIP. Files named by member.',
+    downloadZip: '📦 Download All Photos ZIP',
+    dataExport: 'Data Export', exportMembers: '⊙ Export Member Data',
+    exportMembersDesc: 'Export all member records for backup or migration.',
+    exportJSON: '⬇ Export JSON', exportCSV: '⬇ Export CSV',
+    exportPrefaceTitle: '卷 Export Preface',
+    exportPrefaceDesc: 'Export family preface as a text file.',
+    exportTXT: '⬇ Export Preface TXT',
+    exportAll: '📦 Export Everything',
+    exportAllDesc: 'Package member data (JSON + CSV), preface, and all photos into one ZIP.',
+    exportAllBtn: '📦 Download Complete Backup ZIP',
+  }
+};
+
+function t(key) {
+  return (LANG[curLang] && LANG[curLang][key]) ? LANG[curLang][key] : (LANG.zh[key] || key);
+}
+
+function applyLang() {
+  var isEn = curLang === 'en';
+  var btn = document.getElementById('lang-btn');
+  if (btn) btn.textContent = isEn ? '中' : 'EN';
+
+  // Tabs
+  document.querySelectorAll('.tab[data-zh]').forEach(function(el) {
+    var key = isEn ? 'data-en' : 'data-zh';
+    el.textContent = el.getAttribute(key) || el.textContent;
+  });
+
+  // Logout button
+  var lo = document.getElementById('btn-logout');
+  if (lo) lo.textContent = t('logout');
+
+  // App subtitle
+  var sub = document.querySelector('.top-title p');
+  if (sub) sub.textContent = t('subtitle');
+
+  // Stat labels
+  document.querySelectorAll('.top-stat-label').forEach(function(el, i) {
+    el.textContent = i === 0 ? t('statMembers') : t('statGen');
+  });
+
+  // Form labels - all elements with data-lang-key
+  document.querySelectorAll('[data-lk]').forEach(function(el) {
+    var key = el.getAttribute('data-lk');
+    var val = t(key);
+    if (el.tagName === 'LABEL' || el.tagName === 'BUTTON' || el.tagName === 'DIV' || el.tagName === 'H3' || el.tagName === 'SPAN') {
+      el.textContent = val;
+    } else if (el.hasAttribute('placeholder')) {
+      el.placeholder = val;
+    }
+  });
+
+  // Gender options
+  var gsel = document.getElementById('f-gender');
+  if (gsel) {
+    gsel.options[0].text = t('genderSel');
+    gsel.options[1].text = t('genderM');
+    gsel.options[2].text = t('genderF');
+  }
+
+  // Form title (if not in edit mode)
+  var ft = document.getElementById('form-title');
+  if (ft && ft.textContent.indexOf('修改') === -1 && ft.textContent.indexOf('Edit') === -1) {
+    ft.textContent = t('formTitle');
+  }
+
+  // Save/clear buttons
+  var sb = document.getElementById('save-btn');
+  if (sb && sb.textContent.indexOf('💾') === -1) sb.textContent = t('saveBtn');
+
+  // Re-render member cards to update labels
+  renderMembers();
+  renderPhotos();
+}
+
+function toggleLang() {
+  curLang = curLang === 'zh' ? 'en' : 'zh';
+  localStorage.setItem('ding_lang', curLang);
+  applyLang();
+}
+
+// ── Export family tree as PNG image ─────────────────────
+function exportTreeImage() {
+  var svg = document.getElementById('tree-svg');
+  if (!svg) return;
+  var w = parseInt(svg.getAttribute('width') || 800);
+  var h = parseInt(svg.getAttribute('height') || 600);
+
+  // Serialise SVG — embed fonts via Google Fonts data
+  var svgData = new XMLSerializer().serializeToString(svg);
+
+  // Create canvas at 2x resolution for crisp output
+  var scale = 2;
+  var canvas = document.createElement('canvas');
+  canvas.width  = w * scale;
+  canvas.height = h * scale;
+  var ctx = canvas.getContext('2d');
+
+  // White background
+  ctx.fillStyle = '#fdf8f0';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.scale(scale, scale);
+
+  var img = new Image();
+  var svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+  var url = URL.createObjectURL(svgBlob);
+
+  img.onload = function() {
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+
+    // Add watermark
+    ctx.scale(1/scale, 1/scale);
+    ctx.font = '20px sans-serif';
+    ctx.fillStyle = 'rgba(200,136,42,0.25)';
+    ctx.textAlign = 'right';
+    ctx.fillText('丁氏家谱', canvas.width - 20, canvas.height - 16);
+
+    // Download
+    var a = document.createElement('a');
+    a.download = '丁氏家谱_族谱图_' + new Date().toISOString().slice(0,10) + '.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+    toast(t('exportImg') + ' ✓');
+  };
+
+  img.onerror = function() {
+    // Fallback: SVG download if canvas fails (cross-origin font issue)
+    URL.revokeObjectURL(url);
+    var a = document.createElement('a');
+    a.download = '丁氏家谱_族谱图_' + new Date().toISOString().slice(0,10) + '.svg';
+    var svgBlob2 = new Blob([svgData], { type: 'image/svg+xml' });
+    a.href = URL.createObjectURL(svgBlob2);
+    a.click();
+    toast('已导出为 SVG 格式');
+  };
+
+  img.src = url;
+}
 
 </script>
 </body>
