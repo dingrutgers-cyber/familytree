@@ -431,6 +431,130 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
 .modal-pane { display:none; }
 .modal-pane.active { display:block; }
 </style>
+
+<style>
+/* ─── Timeline Panel ─── */
+.tl-wrap { max-width: 700px; margin: 0 auto; }
+.tl-year-group { margin-bottom: 24px; }
+.tl-year-badge {
+  display: inline-block;
+  background: linear-gradient(135deg,#2c1a08,#3d2410);
+  color: #f5d99a; font-size: 11px; font-weight: 700;
+  padding: 3px 12px; border-radius: 20px;
+  letter-spacing: 2px; margin-bottom: 10px;
+  border: 1px solid rgba(200,136,42,.4);
+}
+.tl-line {
+  position: relative; padding-left: 24px;
+}
+.tl-line::before {
+  content:''; position:absolute; left:6px; top:0; bottom:0;
+  width:2px; background:linear-gradient(180deg,#c8882a,rgba(200,136,42,.15));
+}
+.tl-event-row {
+  position:relative; margin-bottom:10px;
+  background:white; border:1px solid #d4b896;
+  border-radius:8px; padding:10px 12px;
+  cursor:pointer; transition:all .15s;
+}
+.tl-event-row:hover { border-color:#c8882a; box-shadow:0 2px 10px rgba(100,60,0,.1); }
+.tl-event-row::before {
+  content:''; position:absolute;
+  left:-20px; top:14px;
+  width:10px; height:10px; border-radius:50%;
+  border:2px solid #c8882a; background:white;
+}
+.tl-event-row.ev-birth::before   { background:#c8882a; }
+.tl-event-row.ev-death::before   { background:#555; border-color:#555; }
+.tl-event-row.ev-marry::before   { background:#c43a3a; border-color:#c43a3a; }
+.tl-event-type {
+  font-size:10px; color:#6b5540;
+  margin-bottom:2px; letter-spacing:1px;
+}
+.tl-event-name { font-size:13px; font-weight:700; color:#1a1209; }
+.tl-event-detail { font-size:11px; color:#6b5540; margin-top:2px; }
+.tl-filter-bar {
+  display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;
+}
+.tl-filter {
+  padding:4px 12px; border-radius:20px; font-size:11px;
+  border:1px solid #d4b896; background:white;
+  cursor:pointer; transition:all .15s; color:#6b5540;
+}
+.tl-filter.active {
+  background:#c8882a; color:white; border-color:#c8882a;
+}
+
+/* ─── Family Relation Chart ─── */
+#family-svg-wrap {
+  overflow:auto; background:white;
+  border:1px solid #d4b896; border-radius:10px;
+  min-height:200px; padding:10px;
+}
+.fam-search-row {
+  display:flex; gap:8px; margin-bottom:14px;
+}
+.fam-search-row input {
+  flex:1; padding:8px 12px; border:1px solid #c4a070;
+  border-radius:9px; font-size:13px; background:white;
+  outline:none;
+}
+.fam-search-row input:focus { border-color:#c8882a; }
+.fam-results {
+  display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px;
+}
+.fam-chip {
+  padding:4px 12px; border-radius:20px; font-size:12px;
+  border:1px solid #c8882a; background:rgba(200,136,42,.08);
+  color:#7a5010; cursor:pointer; transition:all .15s;
+}
+.fam-chip:hover, .fam-chip.selected {
+  background:#c8882a; color:white;
+}
+
+/* ─── Statistics Panel ─── */
+.stat-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+  gap:12px; margin-bottom:20px;
+}
+.stat-card {
+  background:white; border:1px solid #d4b896;
+  border-radius:10px; padding:16px 14px;
+  text-align:center;
+}
+.stat-big { font-size:28px; font-weight:700; color:#c8882a; }
+.stat-label { font-size:11px; color:#6b5540; margin-top:4px; letter-spacing:1px; }
+.chart-wrap {
+  background:white; border:1px solid #d4b896;
+  border-radius:10px; padding:16px;
+  margin-bottom:16px;
+}
+.chart-title {
+  font-size:13px; font-weight:600; color:#3d2e1a;
+  margin-bottom:14px; display:flex; align-items:center; gap:7px;
+}
+.chart-title::before {
+  content:''; width:3px; height:14px;
+  background:#c8882a; border-radius:2px;
+}
+.bar-chart { display:flex; flex-direction:column; gap:6px; }
+.bar-row { display:flex; align-items:center; gap:8px; font-size:11px; }
+.bar-label { width:80px; color:#6b5540; text-align:right; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bar-track { flex:1; background:#f7efe0; border-radius:4px; height:18px; position:relative; }
+.bar-fill {
+  height:100%; border-radius:4px;
+  background:linear-gradient(90deg,#c8882a,#e6b060);
+  transition:width .6s ease;
+  display:flex; align-items:center; padding-left:6px;
+  min-width:24px;
+}
+.bar-count { font-size:10px; color:white; font-weight:700; }
+.pie-wrap { display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+.pie-legend { display:flex; flex-direction:column; gap:6px; }
+.pie-item { display:flex; align-items:center; gap:6px; font-size:12px; color:#3d2e1a; }
+.pie-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+</style>
 </head>
 <body>
 
@@ -546,6 +670,9 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
       <div class="tab" onclick="showTab('preface')"       data-zh="卷 家族序言" data-en="卷 Preface">卷 家族序言</div>
       <div class="tab" onclick="showTab('pdf')"           data-zh="⬇ 导出PDF"  data-en="⬇ Export PDF">⬇ 导出PDF</div>
       <div class="tab" onclick="showTab('map')"           data-zh="🗺 族人分布" data-en="🗺 Map">🗺 族人分布</div>
+      <div class="tab" onclick="showTab('timeline')" data-zh="◎ 家族时间轴" data-en="◎ Timeline">◎ 家族时间轴</div>
+      <div class="tab" onclick="showTab('family')"   data-zh="❋ 家庭关系图" data-en="❋ Family Chart">❋ 家庭关系图</div>
+      <div class="tab" onclick="showTab('stats')"    data-zh="▦ 族谱统计"   data-en="▦ Statistics">▦ 族谱统计</div>
       <div class="tab" id="tab-btn-admin" onclick="showTab('admin')" style="display:none">🔐 管理员</div>
     </div>
   </div>
@@ -808,6 +935,67 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
       </div>
     </div>
 
+
+    <!-- TIMELINE -->
+    <div class="panel" id="tab-timeline">
+      <div class="card">
+        <div class="card-title" data-lk="tabTimeline">◎ 家族时间轴</div>
+        <div class="tl-filter-bar" id="tl-filters">
+          <button class="tl-filter active" onclick="setTlFilter('all')" data-filter="all">全部</button>
+          <button class="tl-filter" onclick="setTlFilter('birth')" data-filter="birth">🟠 出生</button>
+          <button class="tl-filter" onclick="setTlFilter('death')" data-filter="death">⚫ 去世</button>
+          <button class="tl-filter" onclick="setTlFilter('marry')" data-filter="marry">🔴 婚配</button>
+        </div>
+        <div class="tl-wrap" id="timeline-wrap">
+          <div class="empty"><div class="empty-icon">⏳</div><h3>暂无时间轴数据</h3><p>录入族员出生年份后自动生成</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FAMILY CHART -->
+    <div class="panel" id="tab-family">
+      <div class="card">
+        <div class="card-title" data-lk="tabFamily">❋ 家庭关系图</div>
+        <p style="font-size:12px;color:#6b5540;margin-bottom:12px">搜索族员，查看其直系家庭关系图。</p>
+        <div class="fam-search-row">
+          <input id="fam-search" placeholder="输入族员姓名…" oninput="famSearch()" autocomplete="off">
+        </div>
+        <div class="fam-results" id="fam-results"></div>
+        <div id="family-svg-wrap">
+          <div class="empty"><div class="empty-icon">❋</div><h3>请搜索并选择一位族员</h3><p>将显示其父母、配偶、子女关系图</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATISTICS -->
+    <div class="panel" id="tab-stats">
+      <div class="card">
+        <div class="card-title" data-lk="tabStats">▦ 族谱统计</div>
+        <div class="stat-grid" id="stats-cards"></div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">各世代人数</div>
+        <div class="bar-chart" id="chart-gen"></div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">现居地分布（前10）</div>
+        <div class="bar-chart" id="chart-loc"></div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">出生年代分布</div>
+        <div class="bar-chart" id="chart-decade"></div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">性别 &amp; 健在比例</div>
+        <div class="pie-wrap">
+          <canvas id="pie-gender" width="120" height="120"></canvas>
+          <div class="pie-legend" id="legend-gender"></div>
+          <canvas id="pie-alive" width="120" height="120" style="margin-left:30px"></canvas>
+          <div class="pie-legend" id="legend-alive"></div>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div><!-- /app-screen -->
 
@@ -881,15 +1069,18 @@ function showScreen(name) {
 
 // ─── TABS ─────────────────────────────────────────────────
 function showTab(name) {
-  const tabNames = ['add','search','tree','photos','preface','pdf','map','admin'];
+  const tabNames = ['add','search','tree','photos','preface','pdf','map','admin','timeline','family','stats'];
   document.querySelectorAll('.tab').forEach((t, i) => {
     t.classList.toggle('active', tabNames[i] === name);
   });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  if (name === 'tree') renderTree();
-  if (name === 'search') doSearch();
-  if (name === 'map') renderMap();
+  if (name === 'tree')     renderTree();
+  if (name === 'search')   doSearch();
+  if (name === 'map')      renderMap();
+  if (name === 'timeline') renderTimeline();
+  if (name === 'stats')    renderStats();
+  if (name === 'family')   { document.getElementById('fam-search').value=''; famSearch(); }
 }
 
 // ─── AUTH ─────────────────────────────────────────────────
@@ -1109,7 +1300,7 @@ function doClearForm() {
 // Helper to switch tabs without needing the event object
 function showTab2(name) {
   document.querySelectorAll('.tab').forEach((t, i) => {
-    const names = ['add','search','tree','photos','preface','pdf','map','admin'];
+    const names = ['add','search','tree','photos','preface','pdf','map','admin','timeline','family','stats'];
     t.classList.toggle('active', names[i] === name);
   });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -3218,6 +3409,12 @@ var LANG = {
     exportAll: '📦 一键导出全部数据',
     exportAllDesc: '将族员数据（JSON + CSV）、序言、全部照片打包为一个 ZIP 文件。完整备份。',
     exportAllBtn: '📦 一键下载全部数据 ZIP',
+    tabTimeline: '◎ 家族时间轴', tabFamily: '❋ 家庭关系图', tabStats: '▦ 族谱统计',
+    tlAll: '全部', tlBirth: '🟠 出生', tlDeath: '⚫ 去世', tlMarry: '🔴 婚配',
+    statTotalMembers: '族员总数', statGenerations: '世代数', statDeceased: '已故人数',
+    statAlive: '健在人数', statAvgLifespan: '平均寿命', statPhotos: '照片数量',
+    famSearchPlaceholder: '输入族员姓名…', famNoSelect: '请搜索并选择一位族员',
+    famNoSelectSub: '将显示其父母、配偶、子女关系图',
   },
   en: {
     emailPlaceholder: 'name@example.com',
@@ -3309,6 +3506,12 @@ var LANG = {
     exportAll: '📦 Export Everything',
     exportAllDesc: 'Package member data (JSON + CSV), preface, and all photos into one ZIP.',
     exportAllBtn: '📦 Download Complete Backup ZIP',
+    tabTimeline: '◎ Family Timeline', tabFamily: '❋ Family Chart', tabStats: '▦ Statistics',
+    tlAll: 'All', tlBirth: '🟠 Birth', tlDeath: '⚫ Death', tlMarry: '🔴 Marriage',
+    statTotalMembers: 'Total Members', statGenerations: 'Generations', statDeceased: 'Deceased',
+    statAlive: 'Living', statAvgLifespan: 'Avg Lifespan', statPhotos: 'Photos',
+    famSearchPlaceholder: 'Search member name…', famNoSelect: 'Search and select a member',
+    famNoSelectSub: 'Shows parents, spouse, and children',
   }
 };
 
@@ -3437,6 +3640,426 @@ function exportTreeImage() {
   };
 
   img.src = url;
+}
+
+// ══════════════════════════════════════════════════════════
+// TIMELINE — 家族时间轴
+// ══════════════════════════════════════════════════════════
+var tlFilter = 'all';
+
+function setTlFilter(type) {
+  tlFilter = type;
+  document.querySelectorAll('.tl-filter').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-filter') === type);
+  });
+  renderTimeline();
+}
+
+function renderTimeline() {
+  var wrap = document.getElementById('timeline-wrap');
+  if (!wrap) return;
+
+  // Build events from all members
+  var events = [];
+  allMembers().forEach(function(m) {
+    if (m.virtual) return;
+    var name = m.name;
+    var gen  = m.gen || '';
+    if (m.birth) {
+      var y = parseInt(m.birth);
+      if (!isNaN(y)) events.push({ year:y, type:'birth', name:name, gen:gen,
+        detail: gen ? gen + ' · ' + (m.hometown||m.location||'') : (m.hometown||m.location||''),
+        id: m.id });
+    }
+    if (m.death) {
+      var y2 = parseInt(m.death);
+      if (!isNaN(y2)) {
+        var age = (m.birth && !isNaN(parseInt(m.birth))) ? (y2 - parseInt(m.birth)) + '岁' : '';
+        events.push({ year:y2, type:'death', name:name, gen:gen,
+          detail: age ? '享年 ' + age : '', id: m.id });
+      }
+    }
+    if (m.spouse) {
+      var refYear = m.birth ? parseInt(m.birth) + 25 : null;
+      if (refYear && !isNaN(refYear)) {
+        events.push({ year:refYear, type:'marry', name:name, gen:gen,
+          detail: '配偶：' + m.spouse, id: m.id });
+      }
+    }
+  });
+
+  // Filter
+  if (tlFilter !== 'all') {
+    events = events.filter(function(e) { return e.type === tlFilter; });
+  }
+
+  if (!events.length) {
+    wrap.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div><h3>暂无数据</h3><p>录入族员出生年份后自动生成</p></div>';
+    return;
+  }
+
+  // Sort by year
+  events.sort(function(a,b) { return a.year - b.year; });
+
+  // Group by decade
+  var groups = {};
+  events.forEach(function(e) {
+    var decade = Math.floor(e.year / 10) * 10;
+    if (!groups[decade]) groups[decade] = [];
+    groups[decade].push(e);
+  });
+
+  var typeLabel = { birth:'出生', death:'去世', marry:'婚配' };
+  var typeLabel_en = { birth:'Born', death:'Passed', marry:'Married' };
+
+  var html = '';
+  Object.keys(groups).sort(function(a,b){return a-b;}).forEach(function(decade) {
+    html += '<div class="tl-year-group">';
+    html += '<div class="tl-year-badge">' + decade + '—' + (parseInt(decade)+9) + '</div>';
+    html += '<div class="tl-line">';
+    groups[decade].forEach(function(e) {
+      var label = curLang==='en' ? typeLabel_en[e.type] : typeLabel[e.type];
+      html += '<div class="tl-event-row ev-' + e.type + '" onclick="openModal(\'' + e.id + '\')">';
+      html += '<div class="tl-event-type">' + e.year + ' · ' + label + '</div>';
+      html += '<div class="tl-event-name">' + e.name + '</div>';
+      if (e.detail) html += '<div class="tl-event-detail">' + e.detail + '</div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  });
+
+  wrap.innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════
+// FAMILY CHART — 家庭关系图
+// ══════════════════════════════════════════════════════════
+function famSearch() {
+  var q = (document.getElementById('fam-search').value || '').trim();
+  var res = document.getElementById('fam-results');
+  if (!res) return;
+  if (!q) { res.innerHTML = ''; return; }
+  var matched = allMembers().filter(function(m) {
+    return !m.virtual && m.name && m.name.indexOf(q) !== -1;
+  }).slice(0, 12);
+  res.innerHTML = matched.map(function(m) {
+    return '<div class="fam-chip" onclick="renderFamilyChart(\'' + m.id + '\')">'
+         + m.name + (m.gen ? ' <span style="font-size:10px;opacity:.7">'+m.gen+'</span>' : '')
+         + '</div>';
+  }).join('');
+  if (!matched.length) res.innerHTML = '<div style="font-size:12px;color:#6b5540">未找到匹配族员</div>';
+}
+
+function renderFamilyChart(memberId) {
+  var wrap = document.getElementById('family-svg-wrap');
+  if (!wrap) return;
+
+  // Highlight selected chip
+  document.querySelectorAll('.fam-chip').forEach(function(c) {
+    c.classList.toggle('selected', c.getAttribute('onclick').indexOf(memberId) !== -1);
+  });
+
+  var all = allMembers();
+  var m = all.find(function(x) { return String(x.id) === String(memberId); });
+  if (!m) return;
+
+  // Collect family members
+  var father  = m.father  ? all.find(function(x){return x.name===m.father && !x.virtual;})  : null;
+  var mother  = m.mother  ? all.find(function(x){return x.name===m.mother && !x.virtual;})  : null;
+  var spouse  = m.spouse  ? all.find(function(x){return x.name===m.spouse && !x.virtual;})  : null;
+  var children = all.filter(function(x) {
+    return !x.virtual && (x.father === m.name || x.mother === m.name);
+  });
+
+  // Layout constants
+  var NW = 70, NH = 36, GAP = 20, HGAP = 40;
+  var svgW, svgH;
+
+  // Row Y positions
+  var Y_PARENT = 20;
+  var Y_SELF   = Y_PARENT + NH + HGAP;
+  var Y_CHILD  = Y_SELF   + NH + HGAP;
+
+  // Calculate width
+  var parentCount = (father?1:0) + (mother?1:0);
+  var selfCount   = 1 + (spouse?1:0);
+  var childCount  = children.length;
+  var maxCols     = Math.max(parentCount, selfCount, childCount, 1);
+  svgW = Math.max(maxCols * (NW + GAP) + GAP, 280);
+  svgH = Y_CHILD + NH + 30;
+
+  function cx(col, total) {
+    // Center a group of 'total' nodes, return left-edge x of node at col
+    var groupW = total * NW + (total-1) * GAP;
+    var startX = (svgW - groupW) / 2;
+    return startX + col * (NW + GAP);
+  }
+
+  function nodeBox(x, y, person, isMain) {
+    if (!person) return '';
+    var isDead = !!person.death;
+    var isMale = person.gender === 'male';
+    var bg     = isMain  ? '#FDF6EC' : (isDead ? '#f7f5f2' : (isMale ? '#EEF3FC' : '#FCF0F3'));
+    var stroke = isMain  ? '#c8882a' : (isDead ? '#aaa'    : (isMale ? '#7090C0' : '#C07090'));
+    var tc     = isDead  ? '#666' : '#1a1209';
+    var sw     = isMain  ? 2 : 1;
+    var gen    = person.gen || '';
+    var fn     = person.id ? 'openModal(\'' + person.id + '\')' : '';
+    var svg = '<g onclick="' + fn + '" style="cursor:' + (fn?'pointer':'default') + '">';
+    svg += '<rect x="' + x + '" y="' + y + '" width="' + NW + '" height="' + NH + '" rx="5"'
+         + ' fill="' + bg + '" stroke="' + stroke + '" stroke-width="' + sw + '"/>';
+    if (isMain) {
+      svg += '<rect x="' + x + '" y="' + y + '" width="' + NW + '" height="2.5" rx="1.5" fill="#c8882a"/>';
+    }
+    if (gen) {
+      svg += '<text x="' + (x+NW/2) + '" y="' + (y+10) + '" text-anchor="middle"'
+           + ' font-size="7" fill="#6b5540" font-family="Noto Sans SC,sans-serif">' + gen + '</text>';
+    }
+    var nameY = gen ? y+23 : y+21;
+    svg += '<text x="' + (x+NW/2) + '" y="' + nameY + '" text-anchor="middle"'
+         + ' font-size="12" font-weight="700" fill="' + tc + '" font-family="Noto Sans SC,sans-serif">'
+         + person.name + '</text>';
+    if (isDead) {
+      svg += '<text x="' + (x+NW/2) + '" y="' + (y+NH-3) + '" text-anchor="middle"'
+           + ' font-size="7" fill="#aaa">✝</text>';
+    }
+    svg += '</g>';
+    return svg;
+  }
+
+  // Virtual node (placeholder for unknown spouse/parent)
+  function virtualBox(x, y, label) {
+    return '<rect x="'+x+'" y="'+y+'" width="'+NW+'" height="'+NH+'" rx="5"'
+         + ' fill="#fafafa" stroke="#ccc" stroke-width="1" stroke-dasharray="4 3"/>'
+         + '<text x="'+(x+NW/2)+'" y="'+(y+NH/2+4)+'" text-anchor="middle"'
+         + ' font-size="10" fill="#bbb" font-family="sans-serif">'+label+'</text>';
+  }
+
+  var h = '';
+
+  // ── Draw parents row ──
+  var pNodes = [];
+  if (father) pNodes.push({ person:father, isMain:false });
+  else if (m.father) pNodes.push({ person:{name:m.father, id:null}, isMain:false, virtual:true });
+  if (mother) pNodes.push({ person:mother, isMain:false });
+  else if (m.mother) pNodes.push({ person:{name:m.mother, id:null}, isMain:false, virtual:true });
+
+  pNodes.forEach(function(n, i) {
+    var x = cx(i, pNodes.length);
+    if (n.virtual) h += virtualBox(x, Y_PARENT, n.person.name);
+    else h += nodeBox(x, Y_PARENT, n.person, false);
+  });
+
+  // ── Draw self + spouse row ──
+  var selfNodes = [{ person:m, isMain:true }];
+  if (spouse) selfNodes.push({ person:spouse, isMain:false });
+  else if (m.spouse) selfNodes.push({ person:{name:m.spouse, id:null}, isMain:false, virtual:true });
+
+  var selfXs = [];
+  selfNodes.forEach(function(n, i) {
+    var x = cx(i, selfNodes.length);
+    selfXs.push(x);
+    if (n.virtual) h += virtualBox(x, Y_SELF, n.person.name);
+    else h += nodeBox(x, Y_SELF, n.person, n.isMain);
+  });
+
+  // Heart connector between self & spouse
+  if (selfNodes.length === 2) {
+    var hx = (selfXs[0] + NW + selfXs[1]) / 2;
+    h += '<text x="'+hx+'" y="'+(Y_SELF+NH/2+4)+'" text-anchor="middle"'
+       + ' font-size="11" fill="#c43a3a">♥</text>';
+  }
+
+  // ── Draw children row ──
+  var childXs = [];
+  children.forEach(function(c, i) {
+    var x = cx(i, children.length);
+    childXs.push(x + NW/2);
+    h += nodeBox(x, Y_CHILD, c, false);
+  });
+
+  // ── Connector lines ──
+  // Parent → self
+  var selfMidX = cx(0, selfNodes.length) + NW/2;
+  var midY_ps  = Y_PARENT + NH + HGAP/2;
+
+  if (pNodes.length) {
+    var pMidX = (cx(0, pNodes.length) + NW/2 + cx(pNodes.length-1, pNodes.length) + NW/2) / 2;
+    h += '<line x1="'+pMidX+'" y1="'+(Y_PARENT+NH)+'" x2="'+pMidX+'" y2="'+midY_ps+'"'
+       + ' stroke="#c8882a" stroke-width="1.2" stroke-dasharray="4 2"/>';
+    h += '<line x1="'+pMidX+'" y1="'+midY_ps+'" x2="'+selfMidX+'" y2="'+midY_ps+'"'
+       + ' stroke="#c8882a" stroke-width="1.2" stroke-dasharray="4 2"/>';
+    h += '<line x1="'+selfMidX+'" y1="'+midY_ps+'" x2="'+selfMidX+'" y2="'+Y_SELF+'"'
+       + ' stroke="#c8882a" stroke-width="1.2" stroke-dasharray="4 2"/>';
+  }
+
+  // Self → children
+  if (childXs.length) {
+    var midY_sc = Y_SELF + NH + HGAP/2;
+    h += '<line x1="'+selfMidX+'" y1="'+(Y_SELF+NH)+'" x2="'+selfMidX+'" y2="'+midY_sc+'"'
+       + ' stroke="#7090C0" stroke-width="1.2"/>';
+    if (childXs.length > 1) {
+      h += '<line x1="'+childXs[0]+'" y1="'+midY_sc+'" x2="'+childXs[childXs.length-1]+'" y2="'+midY_sc+'"'
+         + ' stroke="#7090C0" stroke-width="1.2"/>';
+    }
+    childXs.forEach(function(cx2) {
+      h += '<line x1="'+cx2+'" y1="'+midY_sc+'" x2="'+cx2+'" y2="'+Y_CHILD+'"'
+         + ' stroke="#7090C0" stroke-width="1.2"/>';
+    });
+  }
+
+  wrap.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="'+svgW+'" height="'+svgH+'">'
+                 + h + '</svg>';
+}
+
+// ══════════════════════════════════════════════════════════
+// STATISTICS — 族谱统计
+// ══════════════════════════════════════════════════════════
+function renderStats() {
+  var all = allMembers().filter(function(m){ return !m.virtual; });
+  if (!all.length) return;
+
+  var deceased = all.filter(function(m){ return !!m.death; });
+  var alive    = all.filter(function(m){ return !m.death; });
+  var withLifespan = all.filter(function(m){
+    return m.birth && m.death && !isNaN(parseInt(m.birth)) && !isNaN(parseInt(m.death));
+  });
+  var avgLifespan = withLifespan.length
+    ? Math.round(withLifespan.reduce(function(s,m){
+        return s + parseInt(m.death) - parseInt(m.birth);
+      },0) / withLifespan.length)
+    : 0;
+  var gens = new Set(all.map(function(m){return m.gen;}).filter(Boolean));
+
+  // Stat cards
+  var cards = [
+    { key:'statTotalMembers', val:all.length, icon:'👥' },
+    { key:'statGenerations',  val:gens.size,  icon:'🌿' },
+    { key:'statDeceased',     val:deceased.length, icon:'✝' },
+    { key:'statAlive',        val:alive.length, icon:'❤️' },
+    { key:'statAvgLifespan',  val:avgLifespan ? avgLifespan+'岁' : '--', icon:'⏳' },
+    { key:'statPhotos',       val:photos.length, icon:'📷' },
+  ];
+  var el = document.getElementById('stats-cards');
+  if (el) {
+    el.innerHTML = cards.map(function(c) {
+      return '<div class="stat-card">'
+        + '<div class="stat-big">' + c.val + '</div>'
+        + '<div class="stat-label">' + t(c.key) + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  // Bar chart helper
+  function renderBar(elId, data, maxVal) {
+    var el2 = document.getElementById(elId);
+    if (!el2) return;
+    el2.innerHTML = data.map(function(d) {
+      var pct = maxVal > 0 ? Math.round(d.v / maxVal * 100) : 0;
+      return '<div class="bar-row">'
+        + '<div class="bar-label" title="'+d.k+'">'+d.k+'</div>'
+        + '<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%">'
+        + '<span class="bar-count">'+d.v+'</span></div></div>'
+        + '</div>';
+    }).join('');
+  }
+
+  // Chart: by generation
+  var genMap = {};
+  all.forEach(function(m) {
+    if (!m.gen) return;
+    genMap[m.gen] = (genMap[m.gen]||0) + 1;
+  });
+  var genData = Object.keys(genMap).sort(function(a,b){
+    return (parseInt(a)||0) - (parseInt(b)||0);
+  }).map(function(k){ return {k:k, v:genMap[k]}; });
+  var maxGen = Math.max.apply(null, genData.map(function(d){return d.v;}));
+  renderBar('chart-gen', genData, maxGen);
+
+  // Chart: by location (top 10)
+  var locMap = {};
+  all.forEach(function(m) {
+    if (!m.location) return;
+    locMap[m.location] = (locMap[m.location]||0) + 1;
+  });
+  var locData = Object.keys(locMap)
+    .map(function(k){ return {k:k, v:locMap[k]}; })
+    .sort(function(a,b){ return b.v-a.v; })
+    .slice(0, 10);
+  var maxLoc = locData.length ? Math.max.apply(null, locData.map(function(d){return d.v;})) : 1;
+  renderBar('chart-loc', locData, maxLoc);
+
+  // Chart: by birth decade
+  var decadeMap = {};
+  all.forEach(function(m) {
+    if (!m.birth) return;
+    var y = parseInt(m.birth);
+    if (isNaN(y)) return;
+    var dec = Math.floor(y/10)*10 + 's';
+    decadeMap[dec] = (decadeMap[dec]||0) + 1;
+  });
+  var decData = Object.keys(decadeMap).sort()
+    .map(function(k){ return {k:k, v:decadeMap[k]}; });
+  var maxDec = decData.length ? Math.max.apply(null, decData.map(function(d){return d.v;})) : 1;
+  renderBar('chart-decade', decData, maxDec);
+
+  // Pie charts
+  var male   = all.filter(function(m){ return m.gender==='male'; }).length;
+  var female = all.filter(function(m){ return m.gender==='female'; }).length;
+  var unknown = all.length - male - female;
+  var genderData = [];
+  if (male)    genderData.push({ label:curLang==='en'?'Male':'男',    val:male,    color:'#7090C0' });
+  if (female)  genderData.push({ label:curLang==='en'?'Female':'女',  val:female,  color:'#C07090' });
+  if (unknown) genderData.push({ label:curLang==='en'?'Unknown':'未知', val:unknown, color:'#ccc' });
+
+  var aliveData = [];
+  if (alive.length)    aliveData.push({ label:curLang==='en'?'Living':'健在',   val:alive.length,    color:'#c8882a' });
+  if (deceased.length) aliveData.push({ label:curLang==='en'?'Deceased':'已故', val:deceased.length, color:'#888' });
+
+  drawPie('pie-gender', genderData, 'legend-gender');
+  drawPie('pie-alive',  aliveData,  'legend-alive');
+}
+
+function drawPie(canvasId, data, legendId) {
+  var canvas = document.getElementById(canvasId);
+  var legend = document.getElementById(legendId);
+  if (!canvas) return;
+
+  var total = data.reduce(function(s,d){ return s+d.val; }, 0);
+  if (!total) return;
+
+  var ctx = canvas.getContext('2d');
+  var cx2 = canvas.width/2, cy2 = canvas.height/2, r = 44;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  var start = -Math.PI/2;
+  data.forEach(function(d) {
+    var angle = (d.val/total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx2, cy2);
+    ctx.arc(cx2, cy2, r, start, start+angle);
+    ctx.closePath();
+    ctx.fillStyle = d.color;
+    ctx.fill();
+    start += angle;
+  });
+
+  // Donut hole
+  ctx.beginPath();
+  ctx.arc(cx2, cy2, 24, 0, Math.PI*2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+
+  // Legend
+  if (legend) {
+    legend.innerHTML = data.map(function(d) {
+      var pct = Math.round(d.val/total*100);
+      return '<div class="pie-item">'
+        + '<div class="pie-dot" style="background:'+d.color+'"></div>'
+        + '<span>' + d.label + ' <b>' + pct + '%</b> (' + d.val + ')</span>'
+        + '</div>';
+    }).join('');
+  }
 }
 
 </script>
