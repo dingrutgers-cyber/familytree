@@ -1,12 +1,12 @@
 {
   "name": "丁氏家谱系统",
   "short_name": "丁氏家谱",
-  "description": "丁氏一脉 · 血脉相承 · 云端同步",
-  "start_url": "./index.html",
+  "description": "丁氏宗族家谱管理系统",
+  "start_url": "./",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#1a0e05",
   "theme_color": "#1a0e05",
+  "orientation": "portrait-primary",
   "lang": "zh-CN",
   "icons": [
     {
@@ -21,7 +21,5 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ],
-  "screenshots": [],
-  "categories": ["lifestyle", "utilities"]
+  ]
 }
