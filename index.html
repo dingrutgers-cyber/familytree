@@ -760,8 +760,8 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
 
 <script>
 // ─── CONFIG ───────────────────────────────────────────────
-const SB_URL = 'https://jpdabrokzkesnxceybcx.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpwZGFicm9remtlc254Y2V5YmN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxMzYxNTYsImV4cCI6MjA5MDcxMjE1Nn0.zQb3HlQ_clqCFuH3CPeJcmtKiegrf05rWP-AUbsxPO0';
+const SB_URL = 'https://zrlqijlnlhahdpudojov.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpybHFpamxubGhhaGRwdWRvam92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NzE4NDAsImV4cCI6MjA5MDE0Nzg0MH0.HCcDEVCdVUOrTei-dFjAXA7paiC-Elo0vmlHqsaO2rI';
 
 // ─── STATE ────────────────────────────────────────────────
 let db, me, members = [], photos = [], pref = {};
@@ -1514,25 +1514,70 @@ function doZoom(f) {
 }
 
 // ─── PHOTOS ───────────────────────────────────────────────
+// Compress image to keep base64 under Supabase row limits
+// Tries up to 5 quality levels, stops when under MAX_BYTES
+function compressImage(file, maxBytes) {
+  return new Promise(function(resolve) {
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var img = new Image();
+      img.onload = function() {
+        // If already small enough, return as-is
+        if (ev.target.result.length * 0.75 <= maxBytes) {
+          resolve(ev.target.result);
+          return;
+        }
+        var canvas = document.createElement('canvas');
+        // Scale down dimensions if very large (>2000px)
+        var maxDim = 1600;
+        var w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else       { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        // Try qualities from 0.85 down to 0.4
+        var qualities = [0.85, 0.75, 0.65, 0.55, 0.4];
+        var result = null;
+        for (var i = 0; i < qualities.length; i++) {
+          var dataUrl = canvas.toDataURL('image/jpeg', qualities[i]);
+          // base64 length * 0.75 ≈ actual byte size
+          if (dataUrl.length * 0.75 <= maxBytes) {
+            result = dataUrl; break;
+          }
+          result = dataUrl; // keep last attempt even if still large
+        }
+        resolve(result);
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 async function doUploadPhotos(e) {
   if (!me) { toast('❌ 请先登录', true); return; }
   const files = Array.from(e.target.files);
-  const MAX_BYTES = 800 * 1024; // 800KB limit — keeps base64 under ~1.1MB in DB
+  const MAX_BYTES = 800 * 1024; // target size after compression
+  let uploaded = 0;
   for (const file of files) {
-    if (file.size > MAX_BYTES) {
-      toast('❌ ' + file.name + ' 超过800KB，请压缩后再上传', true);
-      continue;
-    }
-    const dataUrl = await readFile(file);
+    toast('正在处理：' + file.name + '...');
+    // Auto-compress — no rejection, just shrink it
+    const dataUrl = await compressImage(file, MAX_BYTES);
+    const finalSize = Math.round(dataUrl.length * 0.75 / 1024);
     const { data, error } = await db.from('photos').insert({
       created_by: me.id, data_url: dataUrl,
       file_name: file.name, assigned_to: ''
     }).select().single();
     if (error) { toast('❌ 上传失败：' + error.message, true); continue; }
     photos.push({ id: data.id, by: me.id, url: dataUrl, name: file.name, to: '' });
-    toast('✓ 已上传：' + file.name);
+    uploaded++;
+    toast('✓ 已上传：' + file.name + '（' + finalSize + 'KB）');
   }
   renderPhotos(); updateStats();
+  if (uploaded > 1) toast('✓ 共上传 ' + uploaded + ' 张照片');
   e.target.value = '';
 }
 
