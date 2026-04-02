@@ -718,8 +718,8 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
       </div>
       <div class="section-label" data-lk="allMembers">全部族员</div>
       <div class="member-grid" id="members-list">
-        <div class="empty"><div class="empty-icon">📜</div>
-          <h3>暂无族员记录</h3><p>从上方表单录入第一位族员</p></div>
+        <div class="empty" id="members-empty"><div class="empty-icon">📜</div>
+          <h3 id="members-empty-h3">暂无族员记录</h3><p id="members-empty-p">从上方表单录入第一位族员</p></div>
       </div>
     </div>
 
@@ -941,10 +941,10 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
       <div class="card">
         <div class="card-title" data-lk="tabTimeline">◎ 家族时间轴</div>
         <div class="tl-filter-bar" id="tl-filters">
-          <button class="tl-filter active" onclick="setTlFilter('all')" data-filter="all">全部</button>
-          <button class="tl-filter" onclick="setTlFilter('birth')" data-filter="birth">🟠 出生</button>
-          <button class="tl-filter" onclick="setTlFilter('death')" data-filter="death">⚫ 去世</button>
-          <button class="tl-filter" onclick="setTlFilter('marry')" data-filter="marry">🔴 婚配</button>
+          <button class="tl-filter active" onclick="setTlFilter('all')" data-filter="all" data-lk="tlAll">全部</button>
+          <button class="tl-filter" onclick="setTlFilter('birth')" data-filter="birth" data-lk="tlBirth">🟠 出生</button>
+          <button class="tl-filter" onclick="setTlFilter('death')" data-filter="death" data-lk="tlDeath">⚫ 去世</button>
+          <button class="tl-filter" onclick="setTlFilter('marry')" data-filter="marry" data-lk="tlMarry">🔴 婚配</button>
         </div>
         <div class="tl-wrap" id="timeline-wrap">
           <div class="empty"><div class="empty-icon">⏳</div><h3>暂无时间轴数据</h3><p>录入族员出生年份后自动生成</p></div>
@@ -956,9 +956,9 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
     <div class="panel" id="tab-family">
       <div class="card">
         <div class="card-title" data-lk="tabFamily">❋ 家庭关系图</div>
-        <p style="font-size:12px;color:#6b5540;margin-bottom:12px">搜索族员，查看其直系家庭关系图。</p>
+        <p style="font-size:12px;color:#6b5540;margin-bottom:12px" data-lk="famDesc">搜索族员，查看其直系家庭关系图。</p>
         <div class="fam-search-row">
-          <input id="fam-search" placeholder="输入族员姓名…" oninput="famSearch()" autocomplete="off">
+          <input id="fam-search" placeholder="输入族员姓名…" data-lk="famSearchPlaceholder" oninput="famSearch()" autocomplete="off">
         </div>
         <div class="fam-results" id="fam-results"></div>
         <div id="family-svg-wrap">
@@ -1127,6 +1127,9 @@ async function doPasswordLogin() {
 
 async function doLogout() {
   await db.auth.signOut();
+  me = null;
+  members = []; photos = []; pref = {};
+  showScreen('auth');
 }
 
 async function loadUser(user) {
@@ -1362,8 +1365,8 @@ function memberCard(m) {
         onclick="promptAddSpouse('${m.name}','${m.spouseOf}')">
       <div class="member-avatar ${cls}" style="border-style:dashed">${m.name.charAt(0)}</div>
       <div class="member-name">${m.name}</div>
-      <div class="member-info"><div>${m.spouseOf} 的配偶</div></div>
-      <span class="member-tag" style="background:rgba(100,60,180,.08);color:#5030a0;border-color:rgba(100,60,180,.25)">配偶（未录入）</span>
+      <div class="member-info"><div>${m.spouseOf} ${curLang==='en'?'Spouse of':'的配偶'}</div></div>
+      <span class="member-tag" style="background:rgba(100,60,180,.08);color:#5030a0;border-color:rgba(100,60,180,.25)">${t('spouse2')}</span>
     </div>`;
   }
   // ── Normal member card ──
@@ -1373,23 +1376,26 @@ function memberCard(m) {
   const av   = ph ? `<img src="${ph.url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
                   : m.name.charAt(0);
   const isDead = !!m.death;
-  // Compute lifespan if both birth and death are known
   const lifespan = (m.birth && m.death)
-    ? (() => { const b=parseInt(m.birth), d=parseInt(m.death); return (!isNaN(b)&&!isNaN(d)) ? `享年${d-b}岁` : ''; })()
+    ? (() => { const b=parseInt(m.birth), d=parseInt(m.death);
+        return (!isNaN(b)&&!isNaN(d)) ? (curLang==='en'?`Age ${d-b}`:`享年${d-b}岁`) : ''; })()
     : '';
+  const hometownLabel = curLang==='en' ? 'From' : '籍贯';
+  const fatherLabel   = curLang==='en' ? 'Father' : '父';
+  const motherLabel   = curLang==='en' ? 'Mother' : '母';
   return `<div class="member-card ${mine ? 'mine' : ''} ${isDead ? 'deceased' : ''}" onclick="openModal('${m.id}')">
     ${mine ? `<button class="del-btn" onclick="doDeleteMember('${m.id}',event)">✕</button>` : ''}
     <div class="member-avatar ${cls}">${av}</div>
     <div class="member-name">${isDead ? '<span style="color:#6b5540;font-size:11px">✝ </span>' : ''}${m.name}${m.style ? ` <span style="font-size:11px;font-weight:400;color:#6b5540">（${m.style}）</span>` : ''}</div>
     <div class="member-info">
       ${m.birth||m.death ? `<div>${m.birth||'？'}${m.death ? ' — '+m.death : ''} ${lifespan}</div>` : ''}
-      ${m.hometown ? `<div>籍贯：${m.hometown.split(' ').slice(0,2).join(' ')}</div>` : ''}
-      ${m.father ? `<div>父：${m.father}</div>` : ''}
-      ${m.mother ? `<div>母：${m.mother}</div>` : ''}
+      ${m.hometown ? `<div>${hometownLabel}：${m.hometown.split(' ').slice(0,2).join(' ')}</div>` : ''}
+      ${m.father ? `<div>${fatherLabel}：${m.father}</div>` : ''}
+      ${m.mother ? `<div>${motherLabel}：${m.mother}</div>` : ''}
     </div>
     ${m.gen ? `<span class="member-tag">${m.gen}</span>` : ''}
-    ${isDead ? `<span class="member-tag" style="background:rgba(80,80,80,.08);color:#555;border-color:rgba(80,80,80,.2)">已故</span>` : ''}
-    <span class="member-tag" style="${mine ? 'background:rgba(26,96,48,.1);color:#1a6030;border-color:rgba(26,96,48,.3)' : ''}">${mine ? '我录入' : '他人录入'}</span>
+    ${isDead ? `<span class="member-tag" style="background:rgba(80,80,80,.08);color:#555;border-color:rgba(80,80,80,.2)">${t('deceased')}</span>` : ''}
+    <span class="member-tag" style="${mine ? 'background:rgba(26,96,48,.1);color:#1a6030;border-color:rgba(26,96,48,.3)' : ''}">${mine ? t('myRecord') : t('othersRecord')}</span>
   </div>`;
 }
 
@@ -1930,10 +1936,10 @@ function getSortedPhotos() {
 function renderPhotos() {
   const el = document.getElementById('photo-grid'); if (!el) return;
   if (!photos.length) {
-    el.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🖼️</div><h3>尚无照片</h3><p>上传后按辈分自动排列</p></div>';
+    el.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🖼️</div><h3>${t('noPhotos')}</h3><p>${t('noPhotosSub')}</p></div>`;
     return;
   }
-  const opts = ['<option value="">— 关联族员 —</option>',
+  const opts = [`<option value="">— ${curLang==='en'?'Assign Member':'关联族员'} —</option>`,
     ...allMembers().map(m => `<option value="${m.name}">${m.name}${m.virtual ? '（配偶）' : ''}</option>`)].join('');
   el.innerHTML = getSortedPhotos().map(p => {
     const mbr  = allMembers().find(m => m.name === p.to);
@@ -1944,7 +1950,7 @@ function renderPhotos() {
       <div class="photo-overlay">
         <div class="photo-name">${p.to || p.name}</div>
         ${mbr ? `<div style="font-size:9px;color:rgba(245,217,154,.7)">${mbr.gen || ''}</div>` : ''}
-        ${mine ? '' : '<div style="font-size:8px;color:rgba(245,217,154,.5);margin-top:2px">他人上传</div>'}
+        ${mine ? '' : `<div style="font-size:8px;color:rgba(245,217,154,.5);margin-top:2px">${curLang==='en'?'Uploaded by others':'他人上传'}</div>`}
       </div>
       ${mine ? `<div class="assign-sel"><select onchange="doAssignPhoto('${p.id}',this.value)">${sel}</select></div>` : ''}
       ${mine ? `<button class="photo-del" onclick="doDeletePhoto('${p.id}')">✕</button>` : ''}
@@ -2410,21 +2416,23 @@ function openModal(id) {
   const lifespanStr = (m.birth && m.death)
     ? (() => { const b=parseInt(m.birth), d=parseInt(m.death); return (!isNaN(b)&&!isNaN(d)) ? `${d-b}岁` : ''; })()
     : '';
+  const genderStr = m.gender==='male' ? t('genderM') : m.gender==='female' ? t('genderF') : '';
+  const lifespanLabel = curLang==='en' ? `Age ${parseInt(m.death)-parseInt(m.birth)}` : lifespanStr ? lifespanStr : '';
   const fields = [
-    ['性别', m.gender==='male'?'男':'女'],
-    ['出生年份', m.birth],
-    ['出生月份', m.birthDate],
-    ['去世年份', m.death],
-    ['去世月份', m.deathDate],
-    ['享年', lifespanStr],
-    ['祖籍', m.hometown],
-    ['现居地', m.location],
-    ['父亲', m.father],
-    ['母亲', m.mother],
-    ['配偶', m.spouse],
-    ['辈分', m.gen],
-    ['堂号', m.clan],
-    ['职业', m.job],
+    [t('gender2'),  genderStr],
+    [t('birthY'),   m.birth],
+    [t('birthM'),   m.birthDate],
+    [t('deathY'),   m.death],
+    [t('deathM'),   m.deathDate],
+    [t('lifespan'), lifespanStr],
+    [t('hometown2'),m.hometown],
+    [t('location'), m.location],
+    [t('father2'),  m.father],
+    [t('mother2'),  m.mother],
+    [t('spouse3'),  m.spouse],
+    [t('gen2'),     m.gen],
+    [t('clan2'),    m.clan],
+    [t('job2'),     m.job],
   ].filter(([,v])=>v);
   const isDead = !!m.death;
   document.getElementById('modal-title').textContent = (isDead ? '✝ ' : '') + m.name + (m.style ? ' · ' + m.style : '');
@@ -2432,17 +2440,17 @@ function openModal(id) {
     (ph ? `<div style="text-align:center;margin-bottom:14px"><img src="${ph.url}"
       style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid #c8882a"></div>` : '') +
     `<table style="width:100%;font-size:12px;border-collapse:collapse">
-      ${fields.map(([k,v])=>`<tr><td style="padding:5px 0;color:#6b5540;width:55px;font-size:11px">${k}</td>
+      ${fields.map(([k,v])=>`<tr><td style="padding:5px 0;color:#6b5540;width:70px;font-size:11px">${k}</td>
         <td style="padding:5px 0;font-weight:600;color:#1a1209">${v}</td></tr>`).join('')}
     </table>` +
     (m.notes ? `<div style="margin-top:10px;padding:10px;background:#f7efe0;border-radius:7px;
       border:1px solid #ede0c8;font-size:12px;color:#6b5540;line-height:1.8">${m.notes}</div>` : '') +
-    (m.byEmail ? `<div style="margin-top:8px;font-size:10px;color:#6b5540">录入者：${m.byEmail}</div>` : '') +
+    (m.byEmail ? `<div style="margin-top:8px;font-size:10px;color:#6b5540">${t('inputBy')}：${m.byEmail}</div>` : '') +
     `<div style="display:flex;gap:8px;margin-top:14px">
       ${mine
-        ? `<button class="btn btn-primary" onclick="doEditMember('${m.id}')" style="font-size:12px">✏️ 修改</button>
-           <button class="btn btn-danger" onclick="doDeleteMember('${m.id}')" style="font-size:12px">删除</button>`
-        : `<div style="font-size:11px;color:#6b5540;padding:6px 0">此记录由他人录入，如需修改请联系：${m.byEmail||'管理员'}</div>`}
+        ? `<button class="btn btn-primary" onclick="doEditMember('${m.id}')" style="font-size:12px">${t('editBtn')}</button>
+           <button class="btn btn-danger" onclick="doDeleteMember('${m.id}')" style="font-size:12px">${t('deleteBtn')}</button>`
+        : `<div style="font-size:11px;color:#6b5540;padding:6px 0">${t('notMine')} ${m.byEmail||''}</div>`}
     </div>`;
   document.getElementById('modal').classList.add('open');
 }
@@ -3410,6 +3418,7 @@ var LANG = {
     exportAllDesc: '将族员数据（JSON + CSV）、序言、全部照片打包为一个 ZIP 文件。完整备份。',
     exportAllBtn: '📦 一键下载全部数据 ZIP',
     tabTimeline: '◎ 家族时间轴', tabFamily: '❋ 家庭关系图', tabStats: '▦ 族谱统计',
+    famDesc: '搜索族员，查看其直系家庭关系图。',
     tlAll: '全部', tlBirth: '🟠 出生', tlDeath: '⚫ 去世', tlMarry: '🔴 婚配',
     statTotalMembers: '族员总数', statGenerations: '世代数', statDeceased: '已故人数',
     statAlive: '健在人数', statAvgLifespan: '平均寿命', statPhotos: '照片数量',
@@ -3507,6 +3516,7 @@ var LANG = {
     exportAllDesc: 'Package member data (JSON + CSV), preface, and all photos into one ZIP.',
     exportAllBtn: '📦 Download Complete Backup ZIP',
     tabTimeline: '◎ Family Timeline', tabFamily: '❋ Family Chart', tabStats: '▦ Statistics',
+    famDesc: 'Search for a member to view their direct family relationships.',
     tlAll: 'All', tlBirth: '🟠 Birth', tlDeath: '⚫ Death', tlMarry: '🔴 Marriage',
     statTotalMembers: 'Total Members', statGenerations: 'Generations', statDeceased: 'Deceased',
     statAlive: 'Living', statAvgLifespan: 'Avg Lifespan', statPhotos: 'Photos',
@@ -3571,6 +3581,30 @@ function applyLang() {
   // Save/clear buttons
   var sb = document.getElementById('save-btn');
   if (sb && sb.textContent.indexOf('💾') === -1) sb.textContent = t('saveBtn');
+
+  // Update empty state text
+  var emH = document.getElementById('members-empty-h3');
+  var emP = document.getElementById('members-empty-p');
+  if (emH) emH.textContent = curLang==='en' ? 'No members yet' : '暂无族员记录';
+  if (emP) emP.textContent = curLang==='en' ? 'Add your first member using the form above' : '从上方表单录入第一位族员';
+
+  // Timeline filter labels
+  document.querySelectorAll('.tl-filter[data-lk]').forEach(function(el) {
+    el.textContent = t(el.getAttribute('data-lk'));
+  });
+
+  // Stats chart titles
+  var chartTitles = document.querySelectorAll('.chart-title');
+  var chartKeys = ['各世代人数','现居地分布（前10）','出生年代分布','性别 & 健在比例'];
+  var chartKeysEn = ['By Generation','Top 10 Locations','Birth Decade','Gender & Living'];
+  chartTitles.forEach(function(el, i) {
+    if (curLang==='en' && chartKeysEn[i]) el.textContent = chartKeysEn[i];
+    else if (chartKeys[i]) el.textContent = chartKeys[i];
+  });
+
+  // Family chart description
+  var famDesc = document.getElementById('fam-search');
+  if (famDesc) famDesc.placeholder = t('famSearchPlaceholder');
 
   // Re-render member cards to update labels
   renderMembers();
@@ -3766,7 +3800,8 @@ function renderFamilyChart(memberId) {
   // Collect family members
   var father  = m.father  ? all.find(function(x){return x.name===m.father && !x.virtual;})  : null;
   var mother  = m.mother  ? all.find(function(x){return x.name===m.mother && !x.virtual;})  : null;
-  var spouse  = m.spouse  ? all.find(function(x){return x.name===m.spouse && !x.virtual;})  : null;
+  // Spouse display disabled pending data validation — shown as text label only
+  var spouse  = null; // m.spouse ? all.find(function(x){return x.name===m.spouse && !x.virtual;}) : null;
   var children = all.filter(function(x) {
     return !x.virtual && (x.father === m.name || x.mother === m.name);
   });
@@ -3852,8 +3887,7 @@ function renderFamilyChart(memberId) {
 
   // ── Draw self + spouse row ──
   var selfNodes = [{ person:m, isMain:true }];
-  if (spouse) selfNodes.push({ person:spouse, isMain:false });
-  else if (m.spouse) selfNodes.push({ person:{name:m.spouse, id:null}, isMain:false, virtual:true });
+  // Spouse shown as text label below self box (not a separate node until data confirmed)
 
   var selfXs = [];
   selfNodes.forEach(function(n, i) {
@@ -3863,11 +3897,13 @@ function renderFamilyChart(memberId) {
     else h += nodeBox(x, Y_SELF, n.person, n.isMain);
   });
 
-  // Heart connector between self & spouse
-  if (selfNodes.length === 2) {
-    var hx = (selfXs[0] + NW + selfXs[1]) / 2;
-    h += '<text x="'+hx+'" y="'+(Y_SELF+NH/2+4)+'" text-anchor="middle"'
-       + ' font-size="11" fill="#c43a3a">♥</text>';
+  // Spouse name as text label if present
+  if (m.spouse) {
+    var selfCx = cx(0, 1) + NW/2;
+    h += '<text x="'+selfCx+'" y="'+(Y_SELF+NH+14)+'" text-anchor="middle"'
+       + ' font-size="10" fill="#c43a3a">♥ ' + m.spouse + '</text>';
+    // Extend SVG height for the label
+    svgH = Math.max(svgH, Y_SELF + NH + 26);
   }
 
   // ── Draw children row ──
