@@ -17,9 +17,30 @@
 <style>
   body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// Load Supabase with CDN fallback for users in China
+(function() {
+  var cdns = [
+    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js',
+    'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.3/supabase.min.js'
+  ];
+  var idx = 0;
+  function tryLoad() {
+    if (idx >= cdns.length) {
+      document.getElementById('cdn-error').style.display = 'flex';
+      return;
+    }
+    var s = document.createElement('script');
+    s.src = cdns[idx++];
+    s.onerror = tryLoad;
+    document.head.appendChild(s);
+  }
+  tryLoad();
+})();
+</script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 #map-container { height: 520px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
 .map-legend { display: flex; gap: 20px; flex-wrap: wrap; margin: 12px 0; font-size: 13px; color: var(--ink3); align-items: center; }
@@ -341,6 +362,24 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
 </style>
 </head>
 <body>
+
+<!-- CDN load error banner (shown if all CDNs fail) -->
+<div id="cdn-error" style="display:none;position:fixed;inset:0;z-index:9999;
+  background:#1a0e05;color:#f5d99a;flex-direction:column;
+  align-items:center;justify-content:center;padding:40px;text-align:center">
+  <div style="font-size:40px;margin-bottom:16px">⚠️</div>
+  <div style="font-size:18px;font-weight:700;margin-bottom:12px;letter-spacing:2px">网络连接失败</div>
+  <div style="font-size:13px;color:rgba(245,217,154,.7);line-height:2;max-width:360px">
+    无法加载必要的网络组件。<br>
+    如您在中国大陆访问，请尝试使用 VPN 后刷新页面。<br><br>
+    <small>错误原因：Supabase CDN 在当前网络下不可访问</small>
+  </div>
+  <button onclick="location.reload()" style="margin-top:24px;padding:10px 28px;
+    background:#c8882a;color:#1a0e05;border:none;border-radius:8px;
+    font-size:14px;font-weight:700;cursor:pointer;letter-spacing:1px">
+    🔄 重新加载
+  </button>
+</div>
 
 <!-- ═══ AUTH SCREEN ═══ -->
 <div id="auth-screen" class="screen active">
@@ -734,6 +773,11 @@ window.onload = function() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+  // Guard: supabase may not have loaded if CDN was blocked
+  if (typeof supabase === 'undefined' || !supabase.createClient) {
+    document.getElementById('cdn-error').style.display = 'flex';
+    return;
+  }
   const { createClient } = supabase;
   db = createClient(SB_URL, SB_KEY);
 
@@ -889,6 +933,7 @@ function isMine(m) {
 function vv(id) { return (document.getElementById(id)?.value || '').trim(); }
 
 async function doSaveMember() {
+  if (!db) { toast('❌ 数据库未连接，请刷新页面或检查网络', true); return; }
   const name = vv('f-name'), gender = vv('f-gender');
   if (!name)   { toast('请填写族员姓名', true); return; }
   if (!gender) { toast('请选择性别', true);     return; }
@@ -1700,9 +1745,9 @@ function doGenPDF() {
   }
 
   const css=`
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap');
+/* Google Fonts removed — uses system Chinese fonts for China compatibility */
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{font-family:'Noto Serif SC',serif;font-size:12pt;background:#fff;color:#1a1209}
+html,body{font-family:'Noto Serif SC','Source Han Serif CN','STSong','SimSun',serif;font-size:12pt;background:#fff;color:#1a1209}
 @page{size:letter portrait;margin:0.5in 0.4in}
 @media print{
   html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -1789,7 +1834,7 @@ table.gt td{
   display:block;
   writing-mode:vertical-rl;
   text-orientation:upright;
-  font-family:'Noto Serif SC',serif;
+  font-family:'Noto Serif SC','Source Han Serif CN','STSong','SimSun',serif;
   line-height:1.5;
   padding:5pt 3pt;
   overflow:hidden;
