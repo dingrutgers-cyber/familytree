@@ -133,10 +133,12 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
 
 /* ─── Tabs ─── */
 .tabs{background:#221408;display:flex;border-bottom:1px solid rgba(200,136,42,.2);
-  padding:0 24px;overflow-x:auto}
+  padding:0 8px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+.tabs::-webkit-scrollbar{display:none}
 .tab{padding:10px 16px;font-size:12px;color:rgba(245,217,154,.5);cursor:pointer;
-  letter-spacing:1px;border-bottom:2px solid transparent;
-  transition:all .2s;white-space:nowrap;user-select:none}
+  letter-spacing:1px;border-bottom:3px solid transparent;
+  transition:color .2s;white-space:nowrap;user-select:none;
+  flex-shrink:0}
 .tab:hover{color:#e6b060}
 .tab.active{color:#e6b060;border-bottom-color:#c8882a}
 
@@ -658,6 +660,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
           <div class="top-user-name" id="user-nm">…</div>
         </div>
         <button id="lang-btn" onclick="toggleLang()">EN</button>
+        <button onclick="checkConnection()" style="padding:4px 8px;border:1px solid rgba(200,136,42,.3);background:transparent;color:rgba(245,217,154,.6);font-size:10px;border-radius:6px;cursor:pointer" title="检测连接状态">🔍</button>
         <button class="btn-logout" onclick="doLogout()" id="btn-logout">退出</button>
       </div>
     </div>
@@ -944,7 +947,7 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
           <button class="tl-filter active" onclick="setTlFilter('all')" data-filter="all" data-lk="tlAll">全部</button>
           <button class="tl-filter" onclick="setTlFilter('birth')" data-filter="birth" data-lk="tlBirth">🟠 出生</button>
           <button class="tl-filter" onclick="setTlFilter('death')" data-filter="death" data-lk="tlDeath">⚫ 去世</button>
-          <button class="tl-filter" onclick="setTlFilter('marry')" data-filter="marry" data-lk="tlMarry">🔴 婚配</button>
+
         </div>
         <div class="tl-wrap" id="timeline-wrap">
           <div class="empty"><div class="empty-icon">⏳</div><h3>暂无时间轴数据</h3><p>录入族员出生年份后自动生成</p></div>
@@ -1022,8 +1025,8 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
 
 <script>
 // ─── CONFIG ───────────────────────────────────────────────
-const SB_URL = 'https://jpdabrokzkesnxceybcx.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpwZGFicm9remtlc254Y2V5YmN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxMzYxNTYsImV4cCI6MjA5MDcxMjE1Nn0.zQb3HlQ_clqCFuH3CPeJcmtKiegrf05rWP-AUbsxPO0';
+const SB_URL = 'https://zrlqijlnlhahdpudojov.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpybHFpamxubGhhaGRwdWRvam92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NzE4NDAsImV4cCI6MjA5MDE0Nzg0MH0.HCcDEVCdVUOrTei-dFjAXA7paiC-Elo0vmlHqsaO2rI';
 
 // ─── STATE ────────────────────────────────────────────────
 let db, me, members = [], photos = [], pref = {};
@@ -1069,12 +1072,21 @@ function showScreen(name) {
 
 // ─── TABS ─────────────────────────────────────────────────
 function showTab(name) {
-  const tabNames = ['add','search','tree','photos','preface','pdf','map','admin','timeline','family','stats'];
-  document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', tabNames[i] === name);
+  // Match tabs by their onclick attribute — more reliable than index
+  var activeTab = null;
+  document.querySelectorAll('.tab').forEach(function(t) {
+    var onclick = t.getAttribute('onclick') || '';
+    var isActive = onclick.indexOf("'" + name + "'") !== -1;
+    t.classList.toggle('active', isActive);
+    if (isActive) activeTab = t;
   });
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
+  // Scroll active tab into view within the scrollable tab bar
+  if (activeTab) {
+    activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
+  document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+  var panel = document.getElementById('tab-' + name);
+  if (panel) panel.classList.add('active');
   if (name === 'tree')     renderTree();
   if (name === 'search')   doSearch();
   if (name === 'map')      renderMap();
@@ -1133,22 +1145,32 @@ async function doLogout() {
 }
 
 async function loadUser(user) {
-  const { data: p } = await db.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  const { data: p, error: pErr } = await db.from('profiles').select('*').eq('id', user.id).maybeSingle();
   me = { id: user.id, email: user.email,
          name: p?.display_name || user.email.split('@')[0],
          role: p?.role || 'member' };
   if (!p) {
-    await db.from('profiles').upsert(
+    // Create profile — retry once if fails (FK constraint timing issue on new projects)
+    const { error: uErr } = await db.from('profiles').upsert(
       { id: user.id, display_name: me.name, role: 'member' },
       { onConflict: 'id', ignoreDuplicates: true }
     );
+    if (uErr) {
+      console.warn('Profile upsert failed (will retry):', uErr.message);
+      // Wait 1s and retry — sometimes auth.users row not yet committed
+      await new Promise(r => setTimeout(r, 1000));
+      await db.from('profiles').upsert(
+        { id: user.id, display_name: me.name, role: 'member' },
+        { onConflict: 'id', ignoreDuplicates: true }
+      );
+    }
   }
   document.getElementById('user-nm').textContent = me.name;
   document.getElementById('user-av').textContent = me.name.charAt(0);
   const adminBtn = document.getElementById('tab-btn-admin');
   if (adminBtn) adminBtn.style.display = me.role === 'admin' ? '' : 'none';
-  // Apply saved language preference
   if (typeof applyLang === 'function') applyLang();
+  console.log('Logged in:', me.email, '| role:', me.role, '| id:', me.id.slice(0,8));
 }
 
 // ─── LOAD DATA ────────────────────────────────────────────
@@ -1203,7 +1225,24 @@ function isMine(m) {
 function vv(id) { return (document.getElementById(id)?.value || '').trim(); }
 
 async function doSaveMember() {
-  if (!db) { toast('❌ 数据库未连接，请刷新页面或检查网络', true); return; }
+  // ── Pre-flight checks ──
+  if (!db) {
+    toast('❌ 数据库未连接，请刷新页面', true);
+    return;
+  }
+  // Verify session is still valid
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) {
+    toast('❌ 登录已过期，请重新登录', true);
+    me = null;
+    showScreen('auth');
+    return;
+  }
+  // Ensure me is populated from session
+  if (!me || !me.id) {
+    await loadUser(session.user);
+  }
+
   const name = vv('f-name'), gender = vv('f-gender');
   if (!name)   { toast('请填写族员姓名', true); return; }
   if (!gender) { toast('请选择性别', true);     return; }
@@ -1223,7 +1262,11 @@ async function doSaveMember() {
       .update({...row, updated_at: new Date().toISOString()})
       .eq('id', editId)
       .select();
-    if (error) { toast('❌ 更新失败：' + error.message, true); return; }
+    if (error) {
+      console.error('UPDATE error:', error);
+      toast('❌ 更新失败：' + error.message + ' (code:' + error.code + ')', true);
+      return;
+    }
     if (!updated || updated.length === 0) { toast('❌ 无权限修改此记录', true); return; }
     const idx = members.findIndex(m => m.id === editId);
     if (idx >= 0) members[idx] = mapRow(updated[0]);
@@ -1233,11 +1276,25 @@ async function doSaveMember() {
     toast('✓ 记录已更新：' + name);
   } else {
     // INSERT
-    if (!me) { toast('❌ 请先登录', true); return; }
+    if (!me || !me.id) { toast('❌ 请先登录', true); return; }
     const { data, error } = await db.from('members').insert({
       ...row, created_by: me.id, created_by_email: me.email
     }).select().single();
-    if (error) { toast('❌ 保存失败：' + error.message, true); return; }
+    if (error) {
+      console.error('INSERT error:', error);
+      // Provide specific guidance based on error type
+      if (error.code === '42501' || error.message.includes('policy')) {
+        toast('❌ 权限错误：请退出后重新登录再试', true);
+      } else if (error.code === 'PGRST301' || error.message.includes('JWT')) {
+        toast('❌ 登录已过期，请重新登录', true);
+        me = null; showScreen('auth');
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        toast('❌ 网络连接失败，请检查网络后重试', true);
+      } else {
+        toast('❌ 保存失败：' + error.message, true);
+      }
+      return;
+    }
     members.push(mapRow(data));
     toast('✓ 已保存至云端：' + name);
   }
@@ -1302,12 +1359,19 @@ function doClearForm() {
 
 // Helper to switch tabs without needing the event object
 function showTab2(name) {
-  document.querySelectorAll('.tab').forEach((t, i) => {
-    const names = ['add','search','tree','photos','preface','pdf','map','admin','timeline','family','stats'];
-    t.classList.toggle('active', names[i] === name);
+  var activeTab = null;
+  document.querySelectorAll('.tab').forEach(function(t) {
+    var onclick = t.getAttribute('onclick') || '';
+    var isActive = onclick.indexOf("'" + name + "'") !== -1;
+    t.classList.toggle('active', isActive);
+    if (isActive) activeTab = t;
   });
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
+  if (activeTab) {
+    activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
+  document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+  var panel = document.getElementById('tab-' + name);
+  if (panel) panel.classList.add('active');
 }
 
 // ─── RENDER ───────────────────────────────────────────────
@@ -3419,7 +3483,7 @@ var LANG = {
     exportAllBtn: '📦 一键下载全部数据 ZIP',
     tabTimeline: '◎ 家族时间轴', tabFamily: '❋ 家庭关系图', tabStats: '▦ 族谱统计',
     famDesc: '搜索族员，查看其直系家庭关系图。',
-    tlAll: '全部', tlBirth: '🟠 出生', tlDeath: '⚫ 去世', tlMarry: '🔴 婚配',
+    tlAll: '全部', tlBirth: '🟠 出生', tlDeath: '⚫ 去世',
     statTotalMembers: '族员总数', statGenerations: '世代数', statDeceased: '已故人数',
     statAlive: '健在人数', statAvgLifespan: '平均寿命', statPhotos: '照片数量',
     famSearchPlaceholder: '输入族员姓名…', famNoSelect: '请搜索并选择一位族员',
@@ -3517,7 +3581,7 @@ var LANG = {
     exportAllBtn: '📦 Download Complete Backup ZIP',
     tabTimeline: '◎ Family Timeline', tabFamily: '❋ Family Chart', tabStats: '▦ Statistics',
     famDesc: 'Search for a member to view their direct family relationships.',
-    tlAll: 'All', tlBirth: '🟠 Birth', tlDeath: '⚫ Death', tlMarry: '🔴 Marriage',
+    tlAll: 'All', tlBirth: '🟠 Birth', tlDeath: '⚫ Death',
     statTotalMembers: 'Total Members', statGenerations: 'Generations', statDeceased: 'Deceased',
     statAlive: 'Living', statAvgLifespan: 'Avg Lifespan', statPhotos: 'Photos',
     famSearchPlaceholder: 'Search member name…', famNoSelect: 'Search and select a member',
@@ -3713,13 +3777,7 @@ function renderTimeline() {
           detail: age ? '享年 ' + age : '', id: m.id });
       }
     }
-    if (m.spouse) {
-      var refYear = m.birth ? parseInt(m.birth) + 25 : null;
-      if (refYear && !isNaN(refYear)) {
-        events.push({ year:refYear, type:'marry', name:name, gen:gen,
-          detail: '配偶：' + m.spouse, id: m.id });
-      }
-    }
+    // Marriage events removed — data unreliable (estimated year only)
   });
 
   // Filter
@@ -4095,6 +4153,33 @@ function drawPie(canvasId, data, legendId) {
         + '<span>' + d.label + ' <b>' + pct + '%</b> (' + d.val + ')</span>'
         + '</div>';
     }).join('');
+  }
+}
+
+// ── Connection diagnostics ──────────────────────────────
+async function checkConnection() {
+  toast('检测中…');
+  try {
+    // Check DB connection
+    if (!db) { toast('❌ 数据库客户端未初始化', true); return; }
+    // Check session
+    const { data: { session }, error: sessErr } = await db.auth.getSession();
+    if (sessErr) { toast('❌ Auth错误：' + sessErr.message, true); return; }
+    if (!session) { toast('❌ 未登录，请重新发送登录链接', true); return; }
+    // Try a test read
+    const { error: readErr } = await db.from('members').select('id').limit(1);
+    if (readErr) {
+      toast('❌ 数据库读取失败：' + readErr.message, true);
+      return;
+    }
+    // Try a test to see if we can insert (just check RLS, don't actually insert)
+    const uid = session.user.id;
+    toast('✅ 连接正常，用户ID：' + uid.slice(0,8) + '…');
+    console.log('Session user:', session.user.email, 'id:', uid);
+    console.log('me object:', JSON.stringify(me));
+  } catch(e) {
+    toast('❌ 连接异常：' + e.message, true);
+    console.error('Connection check error:', e);
   }
 }
 
