@@ -1565,7 +1565,14 @@ function renderTree() {
   const sideSpouseIds = new Set();
   const partnerOf = {};
 
-  members.forEach(m => {
+  // 先处理有孩子的成员，确保配对时 childrenOf 已完整建立
+  const membersSorted = [...members].sort((a, b) => {
+    const aK = (childrenOf[a.name] || []).length;
+    const bK = (childrenOf[b.name] || []).length;
+    return bK - aK; // 孩子多的先处理
+  });
+
+  membersSorted.forEach(m => {
     if (!m.spouse) return;
     const sp = byName[m.spouse];
     if (!sp || sp.virtual) return;
@@ -1584,7 +1591,7 @@ function renderTree() {
     // 谁是丁氏族人（有父母记录）谁做primary
     if (hasParent[m.id] && !hasParent[sp.id])       { primary = m;  side = sp; }
     else if (!hasParent[m.id] && hasParent[sp.id])  { primary = sp; side = m;  }
-    // 都是族人或都不是：独有孩子多的做primary
+    // 都是族人或都不是：有孩子的做primary
     else if (mUniqueKids.length >= spUniqueKids.length) { primary = m; side = sp; }
     else                                               { primary = sp; side = m; }
 
@@ -1602,7 +1609,7 @@ function renderTree() {
   // ── Layout constants ────────────────────────────────────
   const NW  = 36;   // node width
   const NH  = 80;   // node height
-  const GY  = 60;   // vertical gap between generations
+  const GY  = 20;   // vertical gap between generations
   const GX  = 10;   // horizontal gap between siblings within same family
   const FX  = 40;   // extra gap between different family branches (同世不同家庭)
   const SPG = 8;    // gap between member and spouse
