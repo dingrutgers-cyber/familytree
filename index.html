@@ -1664,61 +1664,76 @@ function renderTree() {
     return memberYCache[m.id] = maxY;
   }
 
-  // ── 第二步：递归分配 X 坐标（Y 由世代固定，不再传递）──
-  function layout(m, xStart) {
+  // ── 第二步：Phase 1 — 自底向上计算每个子树所需最小宽度 ──
+  const subtreeW = {};  // member id → 子树所需宽度
+
+  function unitW(m) {
+    // 本人 + 配偶的水平宽度
+    const sp = partnerOf[m.id];
+    return NW + (sp ? SPG + NW : 0);
+  }
+
+  function computeWidth(m) {
     const sp = partnerOf[m.id];
     const myChildren = (childrenOf[m.name] || []).filter(c => !sideSpouseIds.has(c.id));
-    const spChildren = sp ? (childrenOf[sp.name] || []).filter(c => !sideSpouseIds.has(c.id) && !myChildren.find(x=>x.id===c.id)) : [];
-    const children   = [...myChildren, ...spChildren];
-    const myW = NW + (sp ? SPG + NW : 0);
-    const y   = getMemberY(m) ?? 20;
+    const spChildren = sp ? (childrenOf[sp.name] || []).filter(c => !sideSpouseIds.has(c.id) && !myChildren.find(x => x.id === c.id)) : [];
+    const children = [...myChildren, ...spChildren];
+    const myW = unitW(m);
 
-    // 男左女右：如果 primary 是女性而 side 是男性，交换绘制位置
+    if (children.length === 0) {
+      subtreeW[m.id] = myW;
+      return myW;
+    }
+    // 每个孩子的槽宽 = max(孩子子树宽, 孩子+配偶宽)，槽间加 FX 间距
+    let childrenTotalW = 0;
+    children.forEach((c, i) => {
+      const slot = Math.max(computeWidth(c), unitW(c));
+      childrenTotalW += slot;
+      if (i < children.length - 1) childrenTotalW += FX;
+    });
+    subtreeW[m.id] = Math.max(myW, childrenTotalW);
+    return subtreeW[m.id];
+  }
+
+  roots.forEach(r => computeWidth(r));
+
+  // ── Phase 2 — 自顶向下分配 X 坐标（Y 由世代固定）──
+  function assignPos(m, xCenter) {
+    const sp = partnerOf[m.id];
+    const myW = unitW(m);
+    const y = getMemberY(m) ?? 20;
     const spouseOnLeft = sp && m.gender === 'female' && sp.gender === 'male';
 
-    let totalW;
-    if (children.length === 0) {
-      pos[m.id] = { x: spouseOnLeft ? xStart + NW + SPG : xStart, y };
-      totalW = myW;
-    } else {
-      let cx = xStart, sumW = 0;
-      children.forEach((child, idx) => {
-        const cw = layout(child, cx);
-        if (idx < children.length - 1) {
-          // 相邻兄弟之间一律用 FX（每个兄弟都是独立小家庭，配偶也算在内）
-          const childSp = partnerOf[child.id];
-          const childRight = pos[child.id].x + NW + (childSp ? SPG + NW : 0);
-          cx = childRight + FX;
-          sumW = cx - xStart;
-        } else {
-          const childSp = partnerOf[child.id];
-          const childRight = pos[child.id] ? pos[child.id].x + NW + (childSp ? SPG + NW : 0) : cx + NW;
-          sumW = childRight - xStart;
-        }
-      });
-      const firstChildX    = pos[children[0].id].x;
-      const lastChild      = children[children.length - 1];
-      const lastChildSp    = partnerOf[lastChild.id];
-      const lastChildRight = pos[lastChild.id].x + NW + (lastChildSp ? SPG + NW : 0);
-      // 居中：primary+spouse 整体居中于所有孩子上方
-      const midX = (firstChildX + lastChildRight) / 2 - myW / 2;
-      pos[m.id] = { x: spouseOnLeft ? midX + NW + SPG : midX, y };
-      totalW = Math.max(sumW, myW);
-    }
+    // 放置本人
+    pos[m.id] = { x: spouseOnLeft ? xCenter - NW / 2 + NW + SPG : xCenter - NW / 2, y };
 
-    // 配偶位置：男左女右
+    // 放置配偶
     if (sp) {
       const spX = spouseOnLeft ? pos[m.id].x - SPG - NW : pos[m.id].x + NW + SPG;
       pos[sp.id] = { x: spX, y: getMemberY(sp) ?? y };
     }
-    return Math.max(totalW, myW);
+
+    const myChildren = (childrenOf[m.name] || []).filter(c => !sideSpouseIds.has(c.id));
+    const spChildren = sp ? (childrenOf[sp.name] || []).filter(c => !sideSpouseIds.has(c.id) && !myChildren.find(x => x.id === c.id)) : [];
+    const children = [...myChildren, ...spChildren];
+    if (children.length === 0) return;
+
+    // 用预计算的槽宽居中排列所有孩子
+    const slots = children.map(c => Math.max(subtreeW[c.id], unitW(c)));
+    const totalChildW = slots.reduce((s, w, i) => s + w + (i < slots.length - 1 ? FX : 0), 0);
+    let cx = xCenter - totalChildW / 2;
+    children.forEach((c, i) => {
+      assignPos(c, cx + slots[i] / 2);
+      cx += slots[i] + FX;
+    });
   }
 
-  // Layout each root tree horizontally
+  // 各根节点横向排列
   let rootX = 20;
   roots.forEach(r => {
-    const w = layout(r, rootX);
-    rootX += w + FX * 2;
+    const rW = subtreeW[r.id];
+    assignPos(r, rootX + rW / 2);
+    rootX += rW + FX * 2;
   });
 
   // SVG dimensions
