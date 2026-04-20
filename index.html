@@ -2092,8 +2092,27 @@ function doGenPDF() {
     if(ga!==gb)return ga-gb;
     return(parseInt(a.birth)||9999)-(parseInt(b.birth)||9999);
   });
+
+  // 建立姓名→成员映射
+  const membersByName = {};
+  members.forEach(m => { membersByName[m.name] = m; });
+
+  // 没有世代但配偶有世代的人 → 跟随配偶世代显示，不单独放入"未记世代"
+  const spouseFollowSet = new Set();
+  members.forEach(m => {
+    if (!m.gen && m.spouse) {
+      const partner = membersByName[m.spouse];
+      if (partner && partner.gen) spouseFollowSet.add(m.name);
+    }
+  });
+
   const byGen={};
-  sorted.forEach(m=>{const g=m.gen||'未记世代';if(!byGen[g])byGen[g]=[];byGen[g].push(m);});
+  sorted.forEach(m=>{
+    if (spouseFollowSet.has(m.name)) return; // 跟随配偶，不单独分组
+    const g=m.gen||'未记世代';
+    if(!byGen[g])byGen[g]=[];
+    byGen[g].push(m);
+  });
   // 确保世代按辈分顺序排列
   const byGenSorted=Object.fromEntries(
     Object.entries(byGen).sort((a,b)=>parseGenOrder(a[0])-parseGenOrder(b[0]))
@@ -2370,28 +2389,28 @@ table.gt td{
 
     Object.entries(byGenSorted).forEach(([gen,rawMlist])=>{
       // ── 同世成员按出生年排序，配偶紧跟其主成员 ──
-      // 先找出哪些人是配偶（spouse字段互相指向），配对后以主成员birth代表排序
-      const spouseNames = new Set();
-      rawMlist.forEach(m => {
-        if (m.spouse) {
-          const sp = rawMlist.find(x => x.name === m.spouse);
-          if (sp) spouseNames.add(sp.name); // 先标记，下面决定谁是side
-        }
-      });
-      // 简单规则：如果 A.spouse===B.name 且 B.spouse===A.name，birth较小的为主
-      // 逐对处理，避免重复
+      // 配偶可能没有录入世代，从全部 members 里查找
+      const allMembersByName = {};
+      members.forEach(m => { allMembersByName[m.name] = m; });
+
       const paired = new Set();
-      const orderedPairs = []; // [{main, side|null}]
-      // 先按birth排序原始列表
+      const orderedPairs = [];
       const baseSorted = [...rawMlist].sort((a,b)=>
         (parseInt(a.birth)||9999)-(parseInt(b.birth)||9999)
       );
       baseSorted.forEach(m => {
         if (paired.has(m.name)) return;
         paired.add(m.name);
-        const sp = m.spouse ? baseSorted.find(x => x.name === m.spouse && !paired.has(x.name)) : null;
-        if (sp) paired.add(sp.name);
-        orderedPairs.push({ main: m, side: sp || null });
+        // 在全部成员里找配偶（不限于同世代）
+        const spName = m.spouse;
+        const sp = spName ? allMembersByName[spName] : null;
+        // 配偶：在同世代找到、或在"未记世代"里、或任意世代
+        if (sp && !paired.has(sp.name)) {
+          paired.add(sp.name);
+          orderedPairs.push({ main: m, side: sp });
+        } else {
+          orderedPairs.push({ main: m, side: null });
+        }
       });
       // 展开成扁平列表：主成员 + 配偶紧跟
       const mlist = orderedPairs.flatMap(p => p.side ? [p.main, p.side] : [p.main]);
@@ -2402,8 +2421,8 @@ table.gt td{
       const NAME_PT = 28;  // 竖排13pt字体 + padding，需要至少28pt宽
       const availPt = PAGE_PT - GEN_PT;
 
-      // 每人最少需要NAME_PT + 30pt简介列 = 52pt，页面最多放几人
-      const MIN_INFO_PT = 30;
+      // 每人最少需要NAME_PT + 50pt简介列 = 78pt，页面最多放几人
+      const MIN_INFO_PT = 50;
       const perRow = Math.max(1, Math.floor(availPt / (NAME_PT + MIN_INFO_PT)));
 
       // 按perRow分块，人太多时换下一张表（标注"续"）
@@ -2666,7 +2685,6 @@ const GEO_DICT = {
   '郴州市':[25.770,113.014],'郴州':[25.770,113.014],
   '永州市':[26.420,111.613],'永州':[26.420,111.613],
   '怀化市':[27.550,110.001],'怀化':[27.550,110.001],
-  '辰溪县':[28.008,110.184],'辰溪':[28.008,110.184],
   '娄底市':[27.700,111.994],'娄底':[27.700,111.994],
   '湖北省':[30.593,114.305],'湖北':[30.593,114.305],
   '武汉市':[30.593,114.305],'武汉':[30.593,114.305],
@@ -2853,7 +2871,6 @@ const GEO_DICT = {
   '亚特兰大市':[33.749,-84.388],'亚特兰大':[33.749,-84.388],
   '迈阿密市':[25.774,-80.194],'迈阿密':[25.774,-80.194],
   '新泽西':[40.058,-74.406],'加州':[36.778,-119.418],
-  '北卡罗莱纳州':[35.789, -78.779], '北卡':[35.789, -78.779],
   '加拿大':[56.130,-106.347],
   '多伦多市':[43.651,-79.347],'多伦多':[43.651,-79.347],
   '温哥华市':[49.247,-123.116],'温哥华':[49.247,-123.116],
