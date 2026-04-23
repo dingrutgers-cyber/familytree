@@ -877,6 +877,16 @@ body{font-family:'Noto Sans SC',sans-serif;background:#fdf8f0;color:#1a1209;min-
         </div>
         <div id="pdf-msg" style="margin-top:8px;font-size:12px;color:#6b5540"></div>
       </div>
+      <div class="card" style="border-color:#2563eb">
+        <div class="card-title" style="color:#1a3a6b">📱 离线版 HTML</div>
+        <p style="font-size:12px;color:#6b5540;margin-bottom:12px;line-height:1.8">
+          生成一个包含<strong>全部族员数据和照片</strong>的独立 HTML 文件，发给家人后用手机浏览器直接打开，<strong>完全无需网络和账号</strong>。
+        </p>
+        <div class="btn-row">
+          <button class="btn btn-primary" style="background:linear-gradient(135deg,#1a3060,#2a4080);border-color:#2563eb" onclick="doExportOfflineHTML()">📱 下载离线版 HTML</button>
+        </div>
+        <div id="offline-export-msg2" style="margin-top:8px;font-size:12px;color:#6b5540"></div>
+      </div>
     </div>
 
     <!-- ADMIN -->
@@ -3246,22 +3256,24 @@ function doExportPreface() {
 
 // ── Export EVERYTHING as one ZIP ─────────────────────────
 async function doExportOfflineHTML() {
-  if (!adminGuard()) return;
-  const msg = document.getElementById('offline-export-msg');
-  msg.textContent = '正在读取族员数据…';
+  if (!db) { toast('❌ 请先登录', true); return; }
+  const msg  = document.getElementById('offline-export-msg');
+  const msg2 = document.getElementById('offline-export-msg2');
+  function setMsg(t) { if(msg) msg.textContent=t; if(msg2) msg2.textContent=t; }
+  setMsg('正在读取族员数据…');
 
   // 1. 从数据库重新拉取完整数据（含照片 data_url）
   const { data: freshMembers, error: mErr } = await db.from('members').select('*').order('created_at');
-  if (mErr) { toast('❌ 读取族员失败：' + mErr.message, true); msg.textContent=''; return; }
+  if (mErr) { toast('❌ 读取族员失败：' + mErr.message, true); setMsg(''); return; }
 
-  msg.textContent = '正在读取照片…';
+  setMsg('正在读取照片…');
   const { data: freshPhotos, error: pErr } = await db.from('photos').select('*').order('upload_time');
-  if (pErr) { toast('❌ 读取照片失败：' + pErr.message, true); msg.textContent=''; return; }
+  if (pErr) { toast('❌ 读取照片失败：' + pErr.message, true); setMsg(''); return; }
 
-  msg.textContent = '正在读取序言…';
+  setMsg('正在读取序言…');
   const { data: freshPref } = await db.from('preface').select('*').limit(1).maybeSingle();
 
-  msg.textContent = '正在生成离线 HTML…';
+  setMsg('正在生成离线 HTML…');
 
   // 2. 序列化数据为 JSON 嵌入 HTML
   const clanName = freshPref?.clan_name || pref.name || '丁氏家谱';
@@ -3717,7 +3729,7 @@ doSearch();
   a.click();
   URL.revokeObjectURL(a.href);
   const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
-  msg.textContent = '✓ 离线版已下载（' + sizeMB + ' MB）— 用浏览器打开即可查看';
+  setMsg('✓ 离线版已下载（' + sizeMB + ' MB）— 用浏览器打开即可查看');
   toast('✓ 离线版 HTML 已下载');
 }
 
