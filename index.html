@@ -1133,17 +1133,39 @@ function clearAuthMsg() {
 async function doSendLink() {
   const email = document.getElementById('inp-email').value.trim();
   if (!email || !email.includes('@')) { showAuthMsg('请输入正确的邮箱地址', true); return; }
+
+  // Check Supabase loaded
+  if (!db) {
+    showAuthMsg('❌ 网络组件未加载，请刷新页面后重试', true);
+    return;
+  }
+
   const btn = document.getElementById('send-btn');
   btn.textContent = '发送中…'; btn.disabled = true;
   clearAuthMsg();
-  const redirectTo = window.location.href.split('#')[0].split('?')[0];
-  const { error } = await db.auth.signInWithOtp({
-    email, options: { emailRedirectTo: redirectTo, shouldCreateUser: true }
-  });
-  btn.textContent = '发送登录链接'; btn.disabled = false;
-  if (error) { showAuthMsg('发送失败：' + error.message, true); return; }
-  document.getElementById('sent-to').textContent = email;
-  showState('sent');
+
+  try {
+    const redirectTo = window.location.href.split('#')[0].split('?')[0];
+    const { error } = await db.auth.signInWithOtp({
+      email, options: { emailRedirectTo: redirectTo, shouldCreateUser: true }
+    });
+    btn.textContent = '发送登录链接'; btn.disabled = false;
+    if (error) {
+      if (error.message.includes('rate limit') || error.message.includes('429')) {
+        showAuthMsg('❌ 发送太频繁，请等1分钟后重试（Supabase每小时限3封）', true);
+      } else if (error.message.includes('not authorized') || error.message.includes('disabled')) {
+        showAuthMsg('❌ 邮件功能未启用，请联系管理员', true);
+      } else {
+        showAuthMsg('❌ 发送失败：' + error.message, true);
+      }
+      return;
+    }
+    document.getElementById('sent-to').textContent = email;
+    showState('sent');
+  } catch (e) {
+    btn.textContent = '发送登录链接'; btn.disabled = false;
+    showAuthMsg('❌ 网络错误：' + e.message + '，请检查网络后重试', true);
+  }
 }
 
 async function doPasswordLogin() {
