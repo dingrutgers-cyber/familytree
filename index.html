@@ -4190,104 +4190,84 @@ function drawPie(canvasId, data, legendId) {
   }
 }
 
-// ── Offline HTML snapshot ─────────────────────────────────────────────────
-// Generates a fully self-contained offline HTML file that embeds all current
-// member data, photos (base64), and preface directly into the HTML.
-// The offline copy is read-only (no auth, no Supabase) but supports:
-// tree view, member list, search, photos, timeline, statistics, family chart, map.
+// ── Offline HTML snapshot ────────────────────────────────────────────────
+// Generates a fully self-contained offline HTML snapshot of the family tree.
+// All member data, photos (base64), and preface are embedded as JSON.
+// Uses data-id attributes + event delegation to avoid onclick escaping issues.
 async function doDownloadOfflineCopy() {
   if (!adminGuard()) return;
   const msgEl = document.getElementById('offline-msg');
-  if (msgEl) msgEl.textContent = '正在准备离线文件…';
+  const setMsg = m => { if (msgEl) msgEl.textContent = m; };
+
+  setMsg('正在准备离线文件…');
   toast('正在生成离线版本，请稍候…');
 
-  // ── Step 1: fetch Leaflet resources ───────────────────────────────────────
+  // Fetch Leaflet resources to inline
   async function fetchText(url) {
-    try {
-      const r = await fetch(url);
-      return r.ok ? await r.text() : '';
-    } catch(e) { return ''; }
+    try { const r = await fetch(url); return r.ok ? await r.text() : ''; }
+    catch(e) { return ''; }
   }
+  setMsg('正在下载地图组件…');
+  const [leafletJS, leafletCSS] = await Promise.all([
+    fetchText('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'),
+    fetchText('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'),
+  ]);
 
-  if (msgEl) msgEl.textContent = '正在下载地图组件…';
-  const leafletJS  = await fetchText('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js');
-  const leafletCSS = await fetchText('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css');
-
-  // ── Step 2: re-fetch photos from DB to ensure full data_url ───────────────
-  if (msgEl) msgEl.textContent = '正在读取照片数据…';
+  // Re-fetch photos with full data_url
+  setMsg('正在读取照片数据…');
   let offlinePhotos = photos;
   try {
-    const { data: freshPics } = await db.from('photos').select('*');
-    if (freshPics && freshPics.length) {
-      offlinePhotos = freshPics.map(r => ({
-        id: r.id, by: r.created_by, url: r.data_url,
-        name: r.file_name, to: r.assigned_to
-      }));
-    }
+    const { data: fp } = await db.from('photos').select('*');
+    if (fp && fp.length) offlinePhotos = fp.map(r => ({ id:r.id, url:r.data_url, name:r.file_name, to:r.assigned_to }));
   } catch(e) {}
 
-  // ── Step 3: serialise all data ────────────────────────────────────────────
-  if (msgEl) msgEl.textContent = '正在打包族员数据…';
-  const snapshot = {
-    exportedAt: new Date().toISOString(),
-    clanName: pref.name || '丁氏家谱',
-    members: members,
-    photos: offlinePhotos,
-    preface: pref,
-  };
-  const snapshotJSON = JSON.stringify(snapshot);
+  setMsg('正在生成 HTML…');
 
-  // ── Step 4: build the offline HTML ────────────────────────────────────────
-  if (msgEl) msgEl.textContent = '正在生成 HTML…';
+  const snapshot = { exportedAt: new Date().toISOString(), clanName: pref.name||'丁氏家谱', members, photos: offlinePhotos, preface: pref };
 
-  const offlineHTML = buildOfflineHTML(snapshotJSON, leafletJS, leafletCSS);
+  // Build offline HTML as an array of strings joined at the end
+  // Data is injected via a <script> JSON block - no escaping needed.
+  const dataJSON  = JSON.stringify(snapshot);
+  const leafletStyleBlock = leafletCSS  ? `<style>${leafletCSS}</style>` : `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">`;
+  const leafletScriptBlock = leafletJS  ? `<script>${leafletJS}<\/script>` : `<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>`;
 
-  // ── Step 5: trigger download ──────────────────────────────────────────────
+  const offlineHTML = getOfflineTemplate(dataJSON, leafletStyleBlock, leafletScriptBlock, pref.name||'丁氏家谱');
+
   const blob = new Blob([offlineHTML], { type: 'text/html;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href     = url;
-  a.download = (pref.name || '丁氏家谱') + '_离线版_' + new Date().toISOString().slice(0, 10) + '.html';
+  a.href = url;
+  a.download = (pref.name||'丁氏家谱') + '_离线版_' + new Date().toISOString().slice(0,10) + '.html';
   a.click();
   URL.revokeObjectURL(url);
 
-  if (msgEl) msgEl.textContent = '✓ 离线版已下载（' + members.length + ' 族员，' + offlinePhotos.filter(p=>p.url).length + ' 照片）';
+  const photoCount = offlinePhotos.filter(p => p.url && p.url.startsWith('data:')).length;
+  setMsg(`✓ 离线版已下载（${members.length} 族员，${photoCount} 照片）`);
   toast('✓ 离线版 HTML 已下载');
 }
 
-// Builds the complete self-contained offline HTML string
-function buildOfflineHTML(snapshotJSON, leafletJS, leafletCSS) {
-  const data = JSON.parse(snapshotJSON);
-  const clanName = data.clanName || '丁氏家谱';
-
-  // Inline Leaflet or fall back to CDN
-  const leafletScriptTag  = leafletJS
-    ? `<script>${leafletJS}<\/script>`
-    : `<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>`;
-  const leafletStyleTag = leafletCSS
-    ? `<style>${leafletCSS}</style>`
-    : `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">`;
-
-  return `<!DOCTYPE html>
+// Returns the complete offline HTML string.
+// Template uses data-id attributes + event delegation — no inline onclick escaping needed.
+function getOfflineTemplate(dataJSON, leafletStyleBlock, leafletScriptBlock, clanName) {
+  // We concatenate parts to avoid any template-literal vs script-tag conflicts
+  const parts = [];
+  parts.push(`<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>${clanName} · 离线版</title>
-${leafletStyleTag}
+${leafletStyleBlock}
 <style>
-/* ── Reset ── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#fdf8f0;--bg2:#f7efe0;--bg3:#ede0c8;
   --ink:#1a1209;--ink2:#3d2e1a;--ink3:#6b5540;
-  --gold:#c8882a;--gold2:#e6b060;
-  --border:#d4b896;
+  --gold:#c8882a;--gold2:#e6b060;--border:#d4b896;
   --serif:'Noto Serif SC','STSong','SimSun',serif;
   --sans:'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif;
 }
 body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:100vh}
-/* ── Topbar ── */
 .topbar{background:linear-gradient(135deg,#1a0e05,#3d2410);padding:14px 20px;
   display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:50}
 .top-seal{width:40px;height:40px;border-radius:50%;border:2px solid var(--gold);
@@ -4301,73 +4281,57 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 .top-stat-label{font-size:9px;color:rgba(245,217,154,.5);letter-spacing:1px}
 .offline-badge{padding:3px 10px;background:rgba(37,99,235,.2);border:1px solid rgba(37,99,235,.4);
   border-radius:12px;font-size:10px;color:#93c5fd;letter-spacing:1px}
-/* ── Tabs ── */
 .tabs{background:#221408;display:flex;border-bottom:1px solid rgba(200,136,42,.2);
   padding:0 8px;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tab{padding:10px 16px;font-size:12px;color:rgba(245,217,154,.5);cursor:pointer;
-  letter-spacing:1px;border-bottom:3px solid transparent;transition:color .2s;
-  white-space:nowrap;user-select:none;flex-shrink:0}
-.tab:hover{color:var(--gold2)}
-.tab.active{color:var(--gold2);border-bottom-color:var(--gold)}
-/* ── Content ── */
-.content{flex:1;padding:20px;max-width:1100px;margin:0 auto;width:100%}
+  letter-spacing:1px;border-bottom:3px solid transparent;transition:color .2s;white-space:nowrap;user-select:none;flex-shrink:0}
+.tab:hover{color:var(--gold2)}.tab.active{color:var(--gold2);border-bottom-color:var(--gold)}
+.content{padding:20px;max-width:1100px;margin:0 auto;width:100%}
 .panel{display:none}.panel.active{display:block}
-/* ── Cards ── */
-.card{background:white;border:1px solid var(--border);border-radius:12px;
-  padding:18px;box-shadow:0 2px 10px rgba(100,60,0,.07);margin-bottom:14px}
+.card{background:white;border:1px solid var(--border);border-radius:12px;padding:18px;
+  box-shadow:0 2px 10px rgba(100,60,0,.07);margin-bottom:14px}
 .card-title{font-size:13px;font-weight:600;color:var(--ink2);margin-bottom:12px;
   display:flex;align-items:center;gap:7px}
 .card-title::before{content:'';width:3px;height:13px;background:var(--gold);border-radius:2px;flex-shrink:0}
-/* ── Member grid ── */
 .member-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:10px}
-.member-card{background:white;border:1px solid var(--border);border-radius:10px;
-  padding:12px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.member-card{background:white;border:1px solid var(--border);border-radius:10px;padding:12px;
+  cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
 .member-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
   background:linear-gradient(90deg,var(--gold),var(--gold2));transform:scaleX(0);
   transition:transform .2s;transform-origin:left}
 .member-card:hover{box-shadow:0 4px 18px rgba(100,60,0,.13);transform:translateY(-2px)}
 .member-card:hover::before{transform:scaleX(1)}
+.member-card.deceased{opacity:.82;background:linear-gradient(135deg,#f8f5f0,#f0ebe0)}
 .member-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;
   justify-content:center;font-size:14px;font-weight:700;margin-bottom:7px}
 .male{background:rgba(50,80,150,.1);color:#2a4a8a;border:1px solid rgba(50,80,150,.2)}
 .female{background:rgba(155,40,80,.1);color:#8a2a50;border:1px solid rgba(155,40,80,.2)}
 .member-name{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:3px}
 .member-info{font-size:11px;color:var(--ink3);line-height:1.5}
-.member-tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;
-  margin-top:5px;background:rgba(200,136,42,.1);color:#7a5010;
-  border:1px solid rgba(200,136,42,.25)}
-.member-card.deceased{opacity:.82;background:linear-gradient(135deg,#f8f5f0,#f0ebe0)}
-/* ── Search ── */
+.member-tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;margin-top:5px;
+  background:rgba(200,136,42,.1);color:#7a5010;border:1px solid rgba(200,136,42,.25)}
 .search-row{display:flex;gap:8px;margin-bottom:12px}
-.search-row input{flex:1;padding:8px 12px;border:1px solid var(--gold);
-  border-radius:9px;font-size:13px;background:white;outline:none;transition:border-color .2s}
-.search-row input:focus{border-color:var(--gold)}
-.search-btn{background:var(--gold);color:white;border:none;border-radius:9px;
-  padding:8px 14px;cursor:pointer;font-size:13px}
-/* ── Tree ── */
+.search-row input{flex:1;padding:8px 12px;border:1px solid var(--gold);border-radius:9px;
+  font-size:13px;background:white;outline:none}
+.search-btn{background:var(--gold);color:white;border:none;border-radius:9px;padding:8px 14px;cursor:pointer;font-size:13px}
 .tree-box{background:white;border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.tree-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;
-  background:var(--bg2);border-bottom:1px solid var(--bg3);flex-wrap:wrap}
+.tree-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg2);
+  border-bottom:1px solid var(--bg3);flex-wrap:wrap}
 .tree-bar h3{font-size:13px;color:var(--ink2);flex:1;font-weight:600}
-.zoom-btn{width:26px;height:26px;border:1px solid var(--border);border-radius:6px;
-  background:white;cursor:pointer;font-size:13px;display:flex;align-items:center;
-  justify-content:center;transition:all .15s}
-.zoom-btn:hover{background:var(--bg3);border-color:var(--gold)}
+.zoom-btn{width:26px;height:26px;border:1px solid var(--border);border-radius:6px;background:white;
+  cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}
+.zoom-btn:hover{background:var(--bg3)}
 #tree-wrap{padding:18px;overflow:auto;min-height:260px}
-/* ── Photos ── */
 .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:12px}
-.photo-item{position:relative;border-radius:9px;overflow:hidden;
-  border:1px solid var(--border);aspect-ratio:1;background:var(--bg2)}
+.photo-item{position:relative;border-radius:9px;overflow:hidden;border:1px solid var(--border);
+  aspect-ratio:1;background:var(--bg2);cursor:pointer}
 .photo-item img{width:100%;height:100%;object-fit:cover;display:block}
 .photo-overlay{position:absolute;bottom:0;left:0;right:0;
   background:linear-gradient(transparent,rgba(20,10,2,.8));padding:5px 7px}
-.photo-name{font-size:10px;color:#f5d99a;font-weight:600;white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis}
-/* ── Preface ── */
+.photo-name{font-size:10px;color:#f5d99a;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .preface-box{background:var(--bg2);border:1px solid var(--border);border-radius:9px;
   padding:20px;font-size:13px;line-height:2.1;color:var(--ink2);white-space:pre-wrap}
-/* ── Timeline ── */
 .tl-wrap{max-width:700px;margin:0 auto}
 .tl-year-group{margin-bottom:22px}
 .tl-year-badge{display:inline-block;background:linear-gradient(135deg,#2c1a08,#3d2410);
@@ -4376,10 +4340,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 .tl-line{position:relative;padding-left:22px}
 .tl-line::before{content:'';position:absolute;left:5px;top:0;bottom:0;
   width:2px;background:linear-gradient(180deg,var(--gold),rgba(200,136,42,.15))}
-.tl-event-row{position:relative;margin-bottom:8px;background:white;
-  border:1px solid var(--border);border-radius:8px;padding:9px 11px;
-  cursor:pointer;transition:all .15s}
-.tl-event-row:hover{border-color:var(--gold);box-shadow:0 2px 8px rgba(100,60,0,.1)}
+.tl-event-row{position:relative;margin-bottom:8px;background:white;border:1px solid var(--border);
+  border-radius:8px;padding:9px 11px;cursor:pointer;transition:all .15s}
+.tl-event-row:hover{border-color:var(--gold)}
 .tl-event-row::before{content:'';position:absolute;left:-18px;top:12px;
   width:9px;height:9px;border-radius:50%;border:2px solid var(--gold);background:white}
 .tl-event-row.ev-birth::before{background:var(--gold)}
@@ -4391,7 +4354,6 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 .tl-filter{padding:4px 12px;border-radius:20px;font-size:11px;border:1px solid var(--border);
   background:white;cursor:pointer;transition:all .15s;color:var(--ink3)}
 .tl-filter.active{background:var(--gold);color:white;border-color:var(--gold)}
-/* ── Stats ── */
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:18px}
 .stat-card{background:white;border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
 .stat-big{font-size:26px;font-weight:700;color:var(--gold)}
@@ -4403,7 +4365,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 .bar-chart{display:flex;flex-direction:column;gap:5px}
 .bar-row{display:flex;align-items:center;gap:8px;font-size:11px}
 .bar-label{width:80px;color:var(--ink3);text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bar-track{flex:1;background:var(--bg2);border-radius:4px;height:18px;position:relative}
+.bar-track{flex:1;background:var(--bg2);border-radius:4px;height:18px}
 .bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--gold),var(--gold2));
   display:flex;align-items:center;padding-left:6px;min-width:22px}
 .bar-count{font-size:10px;color:white;font-weight:700}
@@ -4411,38 +4373,28 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 .pie-legend{display:flex;flex-direction:column;gap:5px}
 .pie-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2)}
 .pie-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-/* ── Family chart ── */
-#family-svg-wrap{overflow:auto;background:white;border:1px solid var(--border);
-  border-radius:10px;min-height:180px;padding:10px}
+#family-svg-wrap{overflow:auto;background:white;border:1px solid var(--border);border-radius:10px;min-height:180px;padding:10px}
 .fam-search-row{display:flex;gap:8px;margin-bottom:12px}
-.fam-search-row input{flex:1;padding:8px 12px;border:1px solid var(--gold);
-  border-radius:9px;font-size:13px;background:white;outline:none}
+.fam-search-row input{flex:1;padding:8px 12px;border:1px solid var(--gold);border-radius:9px;font-size:13px;background:white;outline:none}
 .fam-results{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .fam-chip{padding:4px 12px;border-radius:20px;font-size:12px;border:1px solid var(--gold);
   background:rgba(200,136,42,.08);color:#7a5010;cursor:pointer;transition:all .15s}
 .fam-chip:hover,.fam-chip.selected{background:var(--gold);color:white}
-/* ── Map ── */
 #map-container{height:480px;border-radius:10px;overflow:hidden;border:1px solid var(--border)}
 .map-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .map-stat{background:white;border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:13px;color:var(--ink2)}
 .map-stat strong{font-size:17px;color:var(--gold);display:block}
 .map-legend{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0;font-size:13px;color:var(--ink3);align-items:center}
 .legend-dot{width:11px;height:11px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle}
-/* ── Modal ── */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;
   display:none;align-items:center;justify-content:center;padding:20px}
 .modal-bg.open{display:flex}
 .modal{background:var(--bg);border:1px solid var(--gold);border-radius:14px;
-  max-width:500px;width:100%;max-height:85vh;overflow-y:auto;
-  box-shadow:0 16px 50px rgba(0,0,0,.3)}
+  max-width:500px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 16px 50px rgba(0,0,0,.3)}
 .modal-head{display:flex;align-items:center;padding:14px 18px 10px;border-bottom:1px solid var(--bg3)}
 .modal-head h3{font-size:14px;font-weight:600;color:var(--ink);flex:1}
 .modal-x{width:22px;height:22px;border-radius:5px;border:1px solid var(--border);
-  background:white;cursor:pointer;font-size:11px;display:flex;align-items:center;
-  justify-content:center;color:var(--ink3)}
-.modal-x:hover{background:var(--bg3)}
-.modal-body{padding:14px 18px 18px}
-/* ── Tree tooltip ── */
+  background:white;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;color:var(--ink3)}
 #tree-photo-tip{position:fixed;display:none;z-index:999;pointer-events:none;
   background:#1a0e05;border:1.5px solid var(--gold);border-radius:10px;padding:8px;
   box-shadow:0 6px 24px rgba(0,0,0,.45);text-align:center;min-width:100px;max-width:160px}
@@ -4452,13 +4404,11 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 #tree-photo-tip .tip-no-photo{width:110px;height:110px;display:flex;align-items:center;
   justify-content:center;background:rgba(200,136,42,.08);border-radius:6px;font-size:28px;
   margin:0 auto 5px;border:1px dashed rgba(200,136,42,.3)}
-/* ── Toast ── */
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);
-  background:#2c1a08;color:var(--gold2);padding:10px 20px;border-radius:20px;
-  font-size:12px;border:1px solid var(--gold);box-shadow:0 4px 18px rgba(0,0,0,.3);
-  z-index:200;opacity:0;transition:all .3s;white-space:nowrap;max-width:90vw;text-align:center}
+  background:#2c1a08;color:var(--gold2);padding:10px 20px;border-radius:20px;font-size:12px;
+  border:1px solid var(--gold);box-shadow:0 4px 18px rgba(0,0,0,.3);z-index:200;opacity:0;
+  transition:all .3s;white-space:nowrap;max-width:90vw;text-align:center;cursor:pointer}
 .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
-/* ── Empty ── */
 .empty{text-align:center;padding:36px 20px;color:var(--ink3)}
 .empty-icon{font-size:38px;margin-bottom:9px}
 .empty h3{font-size:13px;color:var(--ink2);margin-bottom:5px;font-weight:600}
@@ -4466,20 +4416,16 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 .section-label{font-size:12px;color:var(--ink3);letter-spacing:1px;margin-bottom:8px;
   display:flex;align-items:center;gap:7px}
 .section-label::after{content:'';flex:1;height:1px;background:var(--bg3)}
-.divider{height:1px;background:var(--bg3);margin:12px 0}
-/* ── Popup ── */
 .leaflet-popup-content{font-family:var(--sans);font-size:13px;min-width:150px;max-width:230px}
 .popup-title{font-family:var(--serif);font-weight:700;color:var(--ink2);margin-bottom:7px;
   font-size:13px;border-bottom:1px solid var(--bg3);padding-bottom:5px}
-.popup-member{padding:4px 0;border-bottom:1px solid var(--bg3);cursor:pointer;
-  display:flex;align-items:center;gap:5px}
+.popup-member{padding:4px 0;border-bottom:1px solid var(--bg3);cursor:pointer;display:flex;align-items:center;gap:5px}
 .popup-member:last-child{border-bottom:none}
 .popup-member:hover{color:var(--gold)}
 .popup-badge{font-size:10px;padding:1px 5px;border-radius:10px;background:var(--bg2);color:var(--ink3)}
 </style>
 </head>
 <body>
-<!-- Topbar -->
 <div class="topbar">
   <div class="top-seal"><span>谱</span></div>
   <div class="top-title">
@@ -4492,114 +4438,89 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
     <div class="offline-badge">🌐 离线版</div>
   </div>
 </div>
-
-<!-- Tabs -->
-<div class="tabs">
-  <div class="tab active" onclick="showTab('members')">⊙ 族员列表</div>
-  <div class="tab" onclick="showTab('tree')">❖ 族谱图谱</div>
-  <div class="tab" onclick="showTab('photos')">◉ 族员照片</div>
-  <div class="tab" onclick="showTab('preface')">卷 家族序言</div>
-  <div class="tab" onclick="showTab('map')">🗺 族人分布</div>
-  <div class="tab" onclick="showTab('timeline')">◎ 时间轴</div>
-  <div class="tab" onclick="showTab('family')">❋ 家庭关系图</div>
-  <div class="tab" onclick="showTab('stats')">▦ 统计</div>
+<div class="tabs" id="tab-bar">
+  <div class="tab active" data-tab="members">⊙ 族员列表</div>
+  <div class="tab" data-tab="tree">❖ 族谱图谱</div>
+  <div class="tab" data-tab="photos">◉ 族员照片</div>
+  <div class="tab" data-tab="preface">卷 家族序言</div>
+  <div class="tab" data-tab="map">🗺 族人分布</div>
+  <div class="tab" data-tab="timeline">◎ 时间轴</div>
+  <div class="tab" data-tab="family">❋ 家庭关系图</div>
+  <div class="tab" data-tab="stats">▦ 统计</div>
 </div>
-
-<!-- Content -->
-<div class="content" id="main-content">
-
-  <!-- MEMBERS -->
+<div class="content">
   <div class="panel active" id="tab-members">
     <div class="card">
       <div class="card-title">族员检索</div>
       <div class="search-row">
-        <input id="search-q" placeholder="输入姓名、祖籍、堂号…" oninput="doSearch()">
-        <button class="search-btn" onclick="doSearch()">搜索</button>
+        <input id="search-q" placeholder="输入姓名、祖籍、堂号…">
+        <button class="search-btn" id="search-btn">搜索</button>
       </div>
     </div>
     <div class="member-grid" id="members-list"></div>
   </div>
-
-  <!-- TREE -->
   <div class="panel" id="tab-tree">
     <div class="tree-box">
       <div class="tree-bar">
         <h3>族谱图谱</h3>
-        <button class="zoom-btn" onclick="doZoom(1.2)">＋</button>
-        <button class="zoom-btn" onclick="doZoom(0.83)">－</button>
-        <button class="zoom-btn" onclick="doZoom(1)" style="font-size:10px;width:36px">重置</button>
+        <button class="zoom-btn" id="zoom-in">+</button>
+        <button class="zoom-btn" id="zoom-out">-</button>
+        <button class="zoom-btn" id="zoom-reset" style="font-size:10px;width:36px">重置</button>
       </div>
       <div id="tree-wrap"><svg id="tree-svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
     </div>
   </div>
-
-  <!-- PHOTOS -->
   <div class="panel" id="tab-photos">
     <div class="card">
       <div class="card-title">排序</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button onclick="doSortPhotos('gen')" style="padding:5px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer;background:white">按辈分</button>
-        <button onclick="doSortPhotos('birth')" style="padding:5px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer;background:white">按出生年</button>
-        <button onclick="doSortPhotos('name')" style="padding:5px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer;background:white">按姓名</button>
+        <button class="sort-btn" data-sort="gen" style="padding:5px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer;background:white">按辈分</button>
+        <button class="sort-btn" data-sort="birth" style="padding:5px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer;background:white">按出生年</button>
+        <button class="sort-btn" data-sort="name" style="padding:5px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer;background:white">按姓名</button>
       </div>
     </div>
     <div class="section-label">照片库</div>
     <div class="photo-grid" id="photo-grid"></div>
   </div>
-
-  <!-- PREFACE -->
   <div class="panel" id="tab-preface">
     <div class="card">
       <div class="card-title">家族序言</div>
       <div class="preface-box" id="preface-content">暂无序言</div>
     </div>
   </div>
-
-  <!-- MAP -->
   <div class="panel" id="tab-map">
     <div class="map-stats">
       <div class="map-stat"><strong id="map-stat-cities">0</strong>城市</div>
       <div class="map-stat"><strong id="map-stat-provinces">0</strong>省份</div>
     </div>
-    <div class="map-legend">
-      <span><span class="legend-dot" style="background:#2563eb"></span>现居地</span>
-    </div>
+    <div class="map-legend"><span><span class="legend-dot" style="background:#2563eb"></span>现居地</span></div>
     <div id="map-container"></div>
   </div>
-
-  <!-- TIMELINE -->
   <div class="panel" id="tab-timeline">
     <div class="card">
       <div class="card-title">◎ 家族时间轴</div>
       <div class="tl-filter-bar">
-        <button class="tl-filter active" onclick="setTlFilter('all')" data-filter="all">全部</button>
-        <button class="tl-filter" onclick="setTlFilter('birth')" data-filter="birth">🟠 出生</button>
-        <button class="tl-filter" onclick="setTlFilter('death')" data-filter="death">⚫ 去世</button>
+        <button class="tl-filter active" data-filter="all">全部</button>
+        <button class="tl-filter" data-filter="birth">🟠 出生</button>
+        <button class="tl-filter" data-filter="death">⚫ 去世</button>
       </div>
       <div class="tl-wrap" id="timeline-wrap"></div>
     </div>
   </div>
-
-  <!-- FAMILY CHART -->
   <div class="panel" id="tab-family">
     <div class="card">
       <div class="card-title">❋ 家庭关系图</div>
       <div class="fam-search-row">
-        <input id="fam-search" placeholder="输入族员姓名…" oninput="famSearch()" autocomplete="off">
+        <input id="fam-search" placeholder="输入族员姓名…" autocomplete="off">
       </div>
       <div class="fam-results" id="fam-results"></div>
       <div id="family-svg-wrap">
-        <div class="empty"><div class="empty-icon">❋</div><h3>请搜索并选择一位族员</h3><p>将显示其父母、配偶、子女关系图</p></div>
+        <div class="empty"><div class="empty-icon">❋</div><h3>请搜索并选择一位族员</h3></div>
       </div>
     </div>
   </div>
-
-  <!-- STATS -->
   <div class="panel" id="tab-stats">
-    <div class="card">
-      <div class="card-title">▦ 族谱统计</div>
-      <div class="stat-grid" id="stats-cards"></div>
-    </div>
+    <div class="card"><div class="card-title">▦ 族谱统计</div><div class="stat-grid" id="stats-cards"></div></div>
     <div class="chart-wrap"><div class="chart-title">各世代人数</div><div class="bar-chart" id="chart-gen"></div></div>
     <div class="chart-wrap"><div class="chart-title">现居地分布（前10）</div><div class="bar-chart" id="chart-loc"></div></div>
     <div class="chart-wrap"><div class="chart-title">出生年代分布</div><div class="bar-chart" id="chart-decade"></div></div>
@@ -4613,494 +4534,417 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
       </div>
     </div>
   </div>
-
-</div><!-- /content -->
-
-<!-- Modal -->
-<div class="modal-bg" id="modal" onclick="closeModal()">
-  <div class="modal" onclick="event.stopPropagation()">
+</div>
+<div class="modal-bg" id="modal">
+  <div class="modal">
     <div class="modal-head">
       <h3 id="modal-title">族员详情</h3>
-      <button class="modal-x" onclick="closeModal()">✕</button>
+      <button id="modal-x" class="modal-x">✕</button>
     </div>
     <div class="modal-body" id="modal-body"></div>
   </div>
 </div>
-
-<!-- Tree tooltip -->
 <div id="tree-photo-tip">
   <div id="tip-img-wrap"></div>
   <div class="tip-name" id="tip-name"></div>
   <div class="tip-gen" id="tip-gen"></div>
 </div>
+<div class="toast" id="toast"></div>
+${leafletScriptBlock}`);
 
-<!-- Toast -->
-<div class="toast" id="toast" onclick="this.classList.remove(\'show\')"></div>
+  // ── DATA SCRIPT (injected as JSON, no escaping issues) ──────────────────
+  parts.push(`<script id="snapshot-data" type="application/json">`);
+  parts.push(dataJSON);
+  parts.push(`<\/script>`);
 
-${leafletScriptTag}
-<script>
-// ── Embedded data snapshot ────────────────────────────────────────────────
-const SNAPSHOT = ${snapshotJSON};
-let members  = SNAPSHOT.members  || [];
-let photos   = SNAPSHOT.photos   || [];
-let pref     = SNAPSHOT.preface  || {};
+  // ── APP SCRIPT ────────────────────────────────────────────────────────────
+  parts.push(`<script>
+(function() {
+"use strict";
+// Load snapshot data
+const SNAPSHOT = JSON.parse(document.getElementById('snapshot-data').textContent);
+let members   = SNAPSHOT.members  || [];
+let photos    = SNAPSHOT.photos   || [];
+let pref      = SNAPSHOT.preface  || {};
 let photoSort = 'gen';
 let treeScale = 1;
 let tlFilter  = 'all';
 let mapInstance = null, mapInitialized = false;
 
-// ── Init ─────────────────────────────────────────────────────────────────
-window.onload = function() {
+// ── Init ────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', function() {
   if (pref.name) document.getElementById('app-title').textContent = pref.name;
-  updateStats();
-  renderMembers();
-  renderPhotos();
-  renderPreface();
-  renderTimeline();
-  renderStats();
-};
+  updateStats(); renderMembers(); renderPhotos(); renderPreface(); renderTimeline(); renderStats();
+  setupEvents();
+});
 
-// ── Tabs ─────────────────────────────────────────────────────────────────
+// ── Event delegation (no inline onclick needed) ─────────────────────────
+function setupEvents() {
+  // Tab clicks
+  document.getElementById('tab-bar').addEventListener('click', function(e) {
+    var tab = e.target.closest('[data-tab]');
+    if (tab) showTab(tab.dataset.tab);
+  });
+  // Member card clicks
+  document.addEventListener('click', function(e) {
+    var card = e.target.closest('.member-card[data-id]');
+    if (card) { openModal(card.dataset.id); return; }
+    var tlRow = e.target.closest('.tl-event-row[data-id]');
+    if (tlRow) { openModal(tlRow.dataset.id); return; }
+    var famChip = e.target.closest('.fam-chip[data-id]');
+    if (famChip) { renderFamilyChart(famChip.dataset.id); return; }
+    var popMember = e.target.closest('.popup-member[data-id]');
+    if (popMember) { if (mapInstance) mapInstance.closePopup(); openModal(popMember.dataset.id); return; }
+    var photoItem = e.target.closest('.photo-item[data-id]');
+    if (photoItem) { openModal(photoItem.dataset.id); return; }
+    var modalBg = e.target.closest('#modal');
+    if (modalBg && e.target === modalBg) { closeModal(); return; }
+    if (e.target.id === 'modal-x') { closeModal(); return; }
+  });
+  // Search
+  document.getElementById('search-q').addEventListener('input', doSearch);
+  document.getElementById('search-btn').addEventListener('click', doSearch);
+  // Zoom
+  document.getElementById('zoom-in').addEventListener('click', function() { doZoom(1.2); });
+  document.getElementById('zoom-out').addEventListener('click', function() { doZoom(0.83); });
+  document.getElementById('zoom-reset').addEventListener('click', function() { doZoom(1); });
+  // Photo sort
+  document.querySelectorAll('.sort-btn').forEach(function(b) {
+    b.addEventListener('click', function() { doSortPhotos(b.dataset.sort); });
+  });
+  // Timeline filters
+  document.querySelectorAll('.tl-filter').forEach(function(b) {
+    b.addEventListener('click', function() { setTlFilter(b.dataset.filter); });
+  });
+  // Family search
+  document.getElementById('fam-search').addEventListener('input', famSearch);
+  // Toast dismiss
+  document.getElementById('toast').addEventListener('click', function() { this.classList.remove('show'); });
+  // Tree tooltip
+  document.addEventListener('mousemove', positionTreeTip);
+}
+
+// ── Tabs ────────────────────────────────────────────────────────────────
 function showTab(name) {
-  document.querySelectorAll('.tab').forEach(function(t,i) {
-    var tabs = ['members','tree','photos','preface','map','timeline','family','stats'];
-    t.classList.toggle('active', tabs[i] === name);
+  document.querySelectorAll('[data-tab]').forEach(function(t) {
+    t.classList.toggle('active', t.dataset.tab === name);
   });
   document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
   var panel = document.getElementById('tab-' + name);
   if (panel) panel.classList.add('active');
-  if (name === 'tree')     { renderTree(); }
-  if (name === 'map')      { renderMap(); }
-  if (name === 'stats')    { renderStats(); }
-  if (name === 'family')   { document.getElementById('fam-search').value=''; famSearch(); }
+  if (name === 'tree')   renderTree();
+  if (name === 'map')    renderMap();
+  if (name === 'stats')  renderStats();
+  if (name === 'family') { document.getElementById('fam-search').value = ''; famSearch(); }
 }
 
-// ── Stats header ─────────────────────────────────────────────────────────
 function updateStats() {
   document.getElementById('stat-members').textContent = members.length;
-  var gens = new Set(members.map(function(m){ return m.gen; }).filter(Boolean));
+  var gens = new Set(members.map(function(m) { return m.gen; }).filter(Boolean));
   document.getElementById('stat-gen').textContent = gens.size || 0;
 }
 
-// ── parseGenOrder (same as main app) ─────────────────────────────────────
-function parseGenOrder(genStr) {
-  if (!genStr) return 9999;
-  var arabic = genStr.match(/\d+/);
-  if (arabic) return parseInt(arabic[0]);
-  var cn = genStr.replace(/第|世|辈|代/g, '');
-  var d = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9};
-  var m2 = cn.match(/^([一二三四五六七八九])?(十)([一二三四五六七八九])?$|^([一二三四五六七八九])$/);
-  if (m2) {
-    if (m2[4]) return d[m2[4]];
-    var tens = m2[1] ? d[m2[1]] * 10 : 10;
-    var ones = m2[3] ? d[m2[3]] : 0;
-    return tens + ones;
-  }
-  var allGens = members.map(function(m){ return m.gen; }).filter(Boolean);
-  var idx2 = allGens.indexOf(genStr);
-  return idx2 >= 0 ? 500 + idx2 : 9999;
+// ── parseGenOrder ──────────────────────────────────────────────────────
+function parseGenOrder(g) {
+  if (!g) return 9999;
+  var n = g.match(/\d+/); if (n) return parseInt(n[0]);
+  var s = g.replace(/第|世|辈|代/g, '');
+  var d = {一:1,二:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9};
+  var m = s.match(/^([一二三四五六七八九])?(十)([一二三四五六七八九])?$|^([一二三四五六七八九])$/);
+  if (m) { if (m[4]) return d[m[4]]; return (m[1]?d[m[1]]*10:10)+(m[3]?d[m[3]]:0); }
+  var ag = members.map(function(x) { return x.gen; }).filter(Boolean).indexOf(g);
+  return ag >= 0 ? 500 + ag : 9999;
 }
 
-// ── Virtual spouses ───────────────────────────────────────────────────────
+// ── Virtual spouses ────────────────────────────────────────────────────
 function getVirtualSpouses() {
-  var names = new Set(members.map(function(m){ return m.name; }));
-  var seen  = new Set();
-  var virtual = [];
+  var names = new Set(members.map(function(m) { return m.name; }));
+  var seen = new Set(), out = [];
   members.forEach(function(m) {
     if (!m.spouse) return;
-    var spName = m.spouse.trim();
-    if (!spName || names.has(spName) || seen.has(spName)) return;
-    seen.add(spName);
-    virtual.push({ id:'virtual_'+spName, name:spName,
-      gender: m.gender==='male'?'female':'male',
-      virtual:true, spouseOf:m.name, gen:m.gen||'', birth:'', clan:m.clan||'', by:null });
+    var n = m.spouse.trim();
+    if (!n || names.has(n) || seen.has(n)) return;
+    seen.add(n);
+    out.push({ id: 'v_'+n, name: n, gender: m.gender==='male'?'female':'male',
+               virtual: true, spouseOf: m.name, gen: m.gen||'', birth:'', clan:m.clan||'', by:null });
   });
-  return virtual;
+  return out;
 }
-function allMembers() { return [...members, ...getVirtualSpouses()]; }
+function allM() { return members.concat(getVirtualSpouses()); }
 
-// ── Member card ───────────────────────────────────────────────────────────
+// ── Member card ────────────────────────────────────────────────────────
 function memberCard(m) {
-  var cls = m.gender==='female' ? 'female' : 'male';
-  var ph  = photos.find(function(p){ return p.to===m.name; });
-  var av  = ph ? '<img src="'+ph.url+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">' : m.name.charAt(0);
+  var cls = m.gender === 'female' ? 'female' : 'male';
+  var ph  = photos.find(function(p) { return p.to === m.name; });
+  var av  = ph && ph.url ? '<img src="' + ph.url + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">' : m.name.charAt(0);
   var isDead = !!m.death;
-  var lifespan = (m.birth&&m.death) ? (function(){
-    var b=parseInt(m.birth),d=parseInt(m.death);
-    return (!isNaN(b)&&!isNaN(d)) ? '享年'+(d-b)+'岁' : '';
-  })() : '';
-  var fn = m.virtual ? '' : 'openModal(\''+m.id+'\')';
-  return '<div class="member-card '+(isDead?'deceased':'')+'" '+(fn?'onclick="'+fn+'"':'')+' style="'+(m.virtual?'opacity:.75;border-style:dashed;cursor:default':'cursor:pointer')+'">'
-    +'<div class="member-avatar '+cls+'">'+av+'</div>'
-    +'<div class="member-name">'+(isDead?'<span style="color:#6b5540;font-size:11px">✝ </span>':'')+m.name+'</div>'
-    +'<div class="member-info">'
-    +(m.birth||m.death ? '<div>'+（m.birth||'？')+(m.death?' — '+m.death:'')+(lifespan?' '+lifespan:'')+'</div>' : '')
-    +(m.hometown ? '<div>籍：'+m.hometown.split(' ').slice(0,2).join(' ')+'</div>' : '')
-    +(m.father ? '<div>父：'+m.father+'</div>' : '')
-    +'</div>'
-    +(m.gen ? '<span class="member-tag">'+m.gen+'</span>' : '')
-    +(isDead ? '<span class="member-tag" style="background:rgba(80,80,80,.08);color:#555;border-color:rgba(80,80,80,.2)">已故</span>' : '')
-    +(m.virtual ? '<span class="member-tag" style="background:rgba(100,60,180,.08);color:#5030a0;border-color:rgba(100,60,180,.25)">配偶</span>' : '')
-    +'</div>';
+  var lifespan = '';
+  if (m.birth && m.death) { var b=parseInt(m.birth),d=parseInt(m.death); if(!isNaN(b)&&!isNaN(d)) lifespan='享年'+(d-b)+'岁'; }
+  var dataId = m.virtual ? '' : ' data-id="' + m.id + '"';
+  return '<div class="member-card ' + (isDead?'deceased':'') + '"' + dataId
+    + ' style="' + (m.virtual?'opacity:.75;border-style:dashed;cursor:default':'') + '">'
+    + '<div class="member-avatar ' + cls + '">' + av + '</div>'
+    + '<div class="member-name">' + (isDead?'<span style="color:#6b5540;font-size:11px">✝ </span>':'') + m.name + '</div>'
+    + '<div class="member-info">'
+    + (m.birth||m.death ? '<div>'+(m.birth||'?')+(m.death?' — '+m.death:'')+(lifespan?' '+lifespan:'')+'</div>' : '')
+    + (m.hometown ? '<div>籍：'+m.hometown.split(' ').slice(0,2).join(' ')+'</div>' : '')
+    + (m.father ? '<div>父：'+m.father+'</div>' : '')
+    + '</div>'
+    + (m.gen ? '<span class="member-tag">'+m.gen+'</span>' : '')
+    + (isDead ? '<span class="member-tag" style="background:rgba(80,80,80,.08);color:#555;border-color:rgba(80,80,80,.2)">已故</span>' : '')
+    + (m.virtual ? '<span class="member-tag" style="background:rgba(100,60,180,.08);color:#5030a0;border-color:rgba(100,60,180,.25)">配偶</span>' : '')
+    + '</div>';
 }
 
 function renderMembers() {
-  var el = document.getElementById('members-list'); if(!el) return;
-  var all = allMembers();
-  el.innerHTML = all.length ? all.map(memberCard).join('') :
+  var el = document.getElementById('members-list'); if (!el) return;
+  var list = allM();
+  el.innerHTML = list.length ? list.map(memberCard).join('') :
     '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📜</div><h3>暂无族员记录</h3></div>';
 }
 
 function doSearch() {
   var q = (document.getElementById('search-q').value||'').trim().toLowerCase();
-  var el = document.getElementById('members-list'); if(!el) return;
-  var all = allMembers();
-  var list = q ? all.filter(function(m){
+  var el = document.getElementById('members-list'); if (!el) return;
+  var list = allM().filter(function(m) {
+    if (!q) return true;
     return [m.name,m.style,m.hometown,m.location,m.gen,m.clan,m.father,m.mother].some(function(v){return v&&v.toLowerCase().includes(q);});
-  }) : all;
+  });
   el.innerHTML = list.length ? list.map(memberCard).join('') :
     '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🔍</div><h3>未找到</h3></div>';
 }
 
-// ── Modal ─────────────────────────────────────────────────────────────────
+// ── Modal ───────────────────────────────────────────────────────────────
 function openModal(id) {
-  var m = members.find(function(x){ return String(x.id)===String(id); }); if(!m) return;
-  var ph = photos.find(function(p){ return p.to===m.name; });
-  var ls = (m.birth&&m.death) ? (function(){var b=parseInt(m.birth),d=parseInt(m.death);return(!isNaN(b)&&!isNaN(d))?d-b+'岁':'';})() : '';
+  var m = members.find(function(x) { return String(x.id) === String(id); }); if (!m) return;
+  var ph = photos.find(function(p) { return p.to === m.name; });
+  var ls = '';
+  if (m.birth && m.death) { var b=parseInt(m.birth),d=parseInt(m.death); if(!isNaN(b)&&!isNaN(d)) ls=d-b+'岁'; }
   var fields = [
     ['性别', m.gender==='male'?'男':m.gender==='female'?'女':''],
-    ['出生年份', m.birth], ['出生月份', m.birthDate],
-    ['去世年份', m.death], ['享年', ls],
-    ['祖籍', m.hometown], ['现居地', m.location],
-    ['父亲', m.father], ['母亲', m.mother], ['配偶', m.spouse],
-    ['辈分', m.gen], ['堂号', m.clan], ['职业', m.job],
-  ].filter(function(f){ return f[1]; });
+    ['出生年份',m.birth],['出生月份',m.birthDate||m.birth_date],
+    ['去世年份',m.death],['享年',ls],
+    ['祖籍',m.hometown],['现居地',m.location],
+    ['父亲',m.father],['母亲',m.mother],['配偶',m.spouse],
+    ['辈分',m.gen],['堂号',m.clan],['职业',m.job],
+  ].filter(function(f){return f[1];});
   document.getElementById('modal-title').textContent = (m.death?'✝ ':'')+m.name+(m.style?' · '+m.style:'');
   document.getElementById('modal-body').innerHTML =
-    (ph?'<div style="text-align:center;margin-bottom:12px"><img src="'+ph.url+'" style="width:68px;height:68px;border-radius:50%;object-fit:cover;border:2px solid #c8882a"></div>':'') +
-    '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
-    fields.map(function(f){ return '<tr><td style="padding:4px 0;color:#6b5540;width:65px;font-size:11px">'+f[0]+'</td><td style="padding:4px 0;font-weight:600">'+f[1]+'</td></tr>'; }).join('') +
-    '</table>' +
-    (m.notes?'<div style="margin-top:9px;padding:9px;background:#f7efe0;border-radius:7px;border:1px solid #ede0c8;font-size:12px;color:#6b5540;line-height:1.8">'+m.notes+'</div>':'');
+    (ph&&ph.url?'<div style="text-align:center;margin-bottom:12px"><img src="'+ph.url+'" style="width:68px;height:68px;border-radius:50%;object-fit:cover;border:2px solid #c8882a"></div>':'')
+    +'<table style="width:100%;font-size:12px;border-collapse:collapse">'
+    +fields.map(function(f){return '<tr><td style="padding:4px 0;color:#6b5540;width:65px;font-size:11px">'+f[0]+'</td><td style="padding:4px 0;font-weight:600">'+f[1]+'</td></tr>';}).join('')
+    +'</table>'
+    +(m.notes?'<div style="margin-top:9px;padding:9px;background:#f7efe0;border-radius:7px;border:1px solid #ede0c8;font-size:12px;color:#6b5540;line-height:1.8">'+m.notes+'</div>':'');
   document.getElementById('modal').classList.add('open');
 }
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
 
-// ── Photos ────────────────────────────────────────────────────────────────
+// ── Photos ──────────────────────────────────────────────────────────────
 function doSortPhotos(mode) { photoSort = mode; renderPhotos(); }
-
 function getSortedPhotos() {
-  var arr = [...photos];
+  var arr = photos.filter(function(p){return p.url;}).slice();
   if (photoSort==='gen') arr.sort(function(a,b){
-    var ma=allMembers().find(function(m){return m.name===a.to;});
-    var mb=allMembers().find(function(m){return m.name===b.to;});
+    var ma=allM().find(function(m){return m.name===a.to;}),mb=allM().find(function(m){return m.name===b.to;});
     var ga=parseGenOrder(ma&&ma.gen),gb=parseGenOrder(mb&&mb.gen);
-    if(ga!==gb) return ga-gb;
-    return (parseInt(ma&&ma.birth)||9999)-(parseInt(mb&&mb.birth)||9999);
+    if(ga!==gb)return ga-gb;
+    return(parseInt(ma&&ma.birth)||9999)-(parseInt(mb&&mb.birth)||9999);
   });
   else if (photoSort==='birth') arr.sort(function(a,b){
-    var ma=allMembers().find(function(m){return m.name===a.to;});
-    var mb=allMembers().find(function(m){return m.name===b.to;});
-    return (parseInt(ma&&ma.birth)||9999)-(parseInt(mb&&mb.birth)||9999);
+    var ma=allM().find(function(m){return m.name===a.to;}),mb=allM().find(function(m){return m.name===b.to;});
+    return(parseInt(ma&&ma.birth)||9999)-(parseInt(mb&&mb.birth)||9999);
   });
-  else arr.sort(function(a,b){ return (a.to||a.name).localeCompare(b.to||b.name,'zh'); });
+  else arr.sort(function(a,b){return(a.to||a.name).localeCompare(b.to||b.name,'zh');});
   return arr;
 }
-
 function renderPhotos() {
-  var el = document.getElementById('photo-grid'); if(!el) return;
-  var sorted = getSortedPhotos().filter(function(p){ return p.url; });
-  if (!sorted.length) {
-    el.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🖼️</div><h3>尚无照片</h3></div>';
-    return;
-  }
-  el.innerHTML = sorted.map(function(p){
-    var mbr = allMembers().find(function(m){ return m.name===p.to; });
-    return '<div class="photo-item" onclick="'+(mbr&&mbr.id?'openModal(\''+mbr.id+'\')':'')+'" style="cursor:'+(mbr&&mbr.id?'pointer':'default')+'">'
-      +'<img src="'+p.url+'" alt="'+(p.to||p.name)+'">'
-      +'<div class="photo-overlay"><div class="photo-name">'+(p.to||p.name)+'</div>'
+  var el = document.getElementById('photo-grid'); if (!el) return;
+  var sorted = getSortedPhotos();
+  if (!sorted.length) { el.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🖼️</div><h3>尚无照片</h3></div>'; return; }
+  el.innerHTML = sorted.map(function(p) {
+    var mbr = allM().find(function(m){return m.name===p.to;});
+    var dataId = (mbr&&mbr.id&&!mbr.virtual) ? ' data-id="'+mbr.id+'"' : '';
+    return '<div class="photo-item"'+dataId+'>'
+      +'<img src="'+p.url+'" alt="'+(p.to||p.name||'')+'">'
+      +'<div class="photo-overlay"><div class="photo-name">'+(p.to||p.name||'')+'</div>'
       +(mbr&&mbr.gen?'<div style="font-size:9px;color:rgba(245,217,154,.7)">'+mbr.gen+'</div>':'')
       +'</div></div>';
   }).join('');
 }
 
-// ── Preface ───────────────────────────────────────────────────────────────
+// ── Preface ─────────────────────────────────────────────────────────────
 function renderPreface() {
-  var el = document.getElementById('preface-content'); if(!el) return;
+  var el = document.getElementById('preface-content'); if (!el) return;
   if (!pref.text) { el.textContent='暂无序言'; return; }
-  var html = '';
-  if (pref.name) html+='<div style="text-align:center;font-size:17px;font-weight:700;letter-spacing:4px;margin-bottom:6px">'+pref.name+'</div>';
-  if (pref.year) html+='<div style="text-align:center;font-size:11px;color:#6b5540;margin-bottom:12px;letter-spacing:2px">'+pref.year+'续修</div>';
-  if (pref.anc)  html+='<div style="font-size:12px;color:#6b5540;margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid #ede0c8">始迁祖：'+pref.anc+'</div>';
-  html += '<div style="white-space:pre-wrap;font-size:13px;line-height:2.1;color:#3d2e1a">'+pref.text+'</div>';
-  el.innerHTML = html;
+  var h='';
+  if(pref.name) h+='<div style="text-align:center;font-size:17px;font-weight:700;letter-spacing:4px;margin-bottom:6px">'+pref.name+'</div>';
+  if(pref.year) h+='<div style="text-align:center;font-size:11px;color:#6b5540;margin-bottom:12px;letter-spacing:2px">'+pref.year+'续修</div>';
+  if(pref.anc)  h+='<div style="font-size:12px;color:#6b5540;margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid #ede0c8">始迁祖：'+pref.anc+'</div>';
+  h+='<div style="white-space:pre-wrap;font-size:13px;line-height:2.1;color:#3d2e1a">'+pref.text+'</div>';
+  el.innerHTML=h;
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────
-var toastTimer;
+// ── Toast ────────────────────────────────────────────────────────────────
+var _tt;
 function toast(msg) {
-  var el = document.getElementById('toast');
-  el.textContent = msg; el.className = 'toast show';
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 3500);
+  var el=document.getElementById('toast'); el.textContent=msg; el.className='toast show';
+  clearTimeout(_tt); _tt=setTimeout(function(){el.classList.remove('show');},3500);
 }
 
-// ── Tree tooltip ──────────────────────────────────────────────────────────
+// ── Tree tooltip ─────────────────────────────────────────────────────────
 function showTreeTip(evt, memberId) {
-  var tip=document.getElementById('tree-photo-tip');
-  var wrap=document.getElementById('tip-img-wrap');
-  var nm=document.getElementById('tip-name');
-  var gn=document.getElementById('tip-gen');
+  var tip=document.getElementById('tree-photo-tip'),wrap=document.getElementById('tip-img-wrap'),nm=document.getElementById('tip-name'),gn=document.getElementById('tip-gen');
   if(!tip) return;
-  var m=allMembers().find(function(x){ return String(x.id)===String(memberId); });
-  if(!m) return;
-  var ph=photos.find(function(p){ return p.to===m.name; });
-  if(ph&&ph.url) {
-    wrap.innerHTML='<img src="'+ph.url+'" alt="'+m.name+'">';
-  } else {
-    var bg=m.gender==='female'?'rgba(155,40,80,.15)':'rgba(50,80,150,.15)';
-    var col=m.gender==='female'?'#8a2a50':'#2a4a8a';
-    wrap.innerHTML='<div class="tip-no-photo" style="background:'+bg+';color:'+col+'">'+m.name.charAt(0)+'</div>';
-  }
+  var m=allM().find(function(x){return String(x.id)===String(memberId);}); if(!m) return;
+  var ph=photos.find(function(p){return p.to===m.name;});
+  if(ph&&ph.url){wrap.innerHTML='<img src="'+ph.url+'" alt="'+m.name+'">';}
+  else{var bg=m.gender==='female'?'rgba(155,40,80,.15)':'rgba(50,80,150,.15)',col=m.gender==='female'?'#8a2a50':'#2a4a8a';wrap.innerHTML='<div class="tip-no-photo" style="background:'+bg+';color:'+col+'">'+m.name.charAt(0)+'</div>';}
   nm.textContent=m.name+(m.style?' · '+m.style:'');
   gn.textContent=[m.gen,m.birth?m.birth+'年':'',m.death?'— '+m.death+'年':''].filter(Boolean).join('  ');
-  tip.style.display='block';
-  positionTreeTip(evt);
+  tip.style.display='block'; positionTreeTip(evt);
 }
 function positionTreeTip(evt) {
-  var tip=document.getElementById('tree-photo-tip');
-  if(!tip||tip.style.display==='none') return;
+  var tip=document.getElementById('tree-photo-tip'); if(!tip||tip.style.display==='none') return;
   var tw=tip.offsetWidth||160,th=tip.offsetHeight||160;
   var left=evt.clientX+16; if(left+tw>window.innerWidth-10) left=evt.clientX-tw-16;
   var top=evt.clientY+16;  if(top+th>window.innerHeight-10) top=evt.clientY-th-16;
   tip.style.left=left+'px'; tip.style.top=top+'px';
 }
-function hideTreeTip() { var t=document.getElementById('tree-photo-tip'); if(t) t.style.display='none'; }
-document.addEventListener('mousemove', positionTreeTip);
+function hideTreeTip(){var t=document.getElementById('tree-photo-tip');if(t)t.style.display='none';}
 
-// ── Tree (full renderTree from main app, self-contained) ──────────────────
-function renderTree() {
+// ── Tree rendering ───────────────────────────────────────────────────────
+function renderTree(){
   var svg=document.getElementById('tree-svg'); if(!svg) return;
-  if(!members.length){
-    svg.setAttribute('width','400');svg.setAttribute('height','120');
-    svg.innerHTML='<text x="200" y="60" text-anchor="middle" fill="#6b5540" font-size="13">暂无族员</text>';
-    return;
-  }
-  var virtual=getVirtualSpouses();
-  var allM=[...members,...virtual];
-  var byName={};
-  allM.forEach(function(m){ byName[m.name]=m; });
-
+  if(!members.length){svg.setAttribute('width','400');svg.setAttribute('height','120');svg.innerHTML='<text x="200" y="60" text-anchor="middle" fill="#6b5540" font-size="13">暂无族员</text>';return;}
+  var virtual=getVirtualSpouses(),allMem=members.concat(virtual),byName={};
+  allMem.forEach(function(m){byName[m.name]=m;});
   var childrenOf={},hasParent={};
   members.forEach(function(m){
-    if(m.father&&byName[m.father]){
-      if(!childrenOf[m.father]) childrenOf[m.father]=[];
-      if(!childrenOf[m.father].find(function(c){return c.id===m.id;})) childrenOf[m.father].push(m);
-      hasParent[m.id]=true;
-    }
-    if(m.mother&&byName[m.mother]){
-      if(!childrenOf[m.mother]) childrenOf[m.mother]=[];
-      if(!childrenOf[m.mother].find(function(c){return c.id===m.id;})) childrenOf[m.mother].push(m);
-      hasParent[m.id]=true;
-    }
+    if(m.father&&byName[m.father]){if(!childrenOf[m.father])childrenOf[m.father]=[];if(!childrenOf[m.father].find(function(c){return c.id===m.id;}))childrenOf[m.father].push(m);hasParent[m.id]=true;}
+    if(m.mother&&byName[m.mother]){if(!childrenOf[m.mother])childrenOf[m.mother]=[];if(!childrenOf[m.mother].find(function(c){return c.id===m.id;}))childrenOf[m.mother].push(m);hasParent[m.id]=true;}
   });
-  Object.keys(childrenOf).forEach(function(p){
-    childrenOf[p].sort(function(a,b){ return (parseInt(a.birth)||9999)-(parseInt(b.birth)||9999); });
-  });
-
-  var sideSpouseIds=new Set(),partnerOf={};
+  Object.keys(childrenOf).forEach(function(p){childrenOf[p].sort(function(a,b){return(parseInt(a.birth)||9999)-(parseInt(b.birth)||9999);});});
+  var sideIds=new Set(),partnerOf={};
   members.forEach(function(m){
-    if(!m.spouse) return;
-    var sp=byName[m.spouse];
-    if(!sp||sp.virtual) return;
-    if(sideSpouseIds.has(sp.id)||sideSpouseIds.has(m.id)) return;
-    var mKids=(childrenOf[m.name]||[]);
-    var spKids=(childrenOf[sp.name]||[]);
-    var mU=mKids.filter(function(k){return !spKids.find(function(k2){return k2.id===k.id;});});
-    var spU=spKids.filter(function(k){return !mKids.find(function(k2){return k2.id===k.id;});});
-    if(mU.length>0&&spU.length>0) return;
-    var primary,side;
-    if(hasParent[m.id]&&!hasParent[sp.id]){primary=m;side=sp;}
-    else if(!hasParent[m.id]&&hasParent[sp.id]){primary=sp;side=m;}
-    else if(mU.length>=spU.length){primary=m;side=sp;}
-    else{primary=sp;side=m;}
-    sideSpouseIds.add(side.id);
-    partnerOf[primary.id]=side;
+    if(!m.spouse)return;var sp=byName[m.spouse];if(!sp||sp.virtual)return;
+    if(sideIds.has(sp.id)||sideIds.has(m.id))return;
+    var mK=(childrenOf[m.name]||[]),spK=(childrenOf[sp.name]||[]);
+    var mU=mK.filter(function(k){return!spK.find(function(k2){return k2.id===k.id;});});
+    var spU=spK.filter(function(k){return!mK.find(function(k2){return k2.id===k.id;});});
+    if(mU.length>0&&spU.length>0)return;
+    var pri,sid;
+    if(hasParent[m.id]&&!hasParent[sp.id]){pri=m;sid=sp;}else if(!hasParent[m.id]&&hasParent[sp.id]){pri=sp;sid=m;}else if(mU.length>=spU.length){pri=m;sid=sp;}else{pri=sp;sid=m;}
+    sideIds.add(sid.id);partnerOf[pri.id]=sid;
   });
-  virtual.forEach(function(v){
-    var partner=byName[v.spouseOf];
-    if(partner&&!partnerOf[partner.id]) partnerOf[partner.id]=v;
-  });
-
-  var roots=members.filter(function(m){ return !hasParent[m.id]&&!sideSpouseIds.has(m.id); });
-
-  var NW=36,NH=80,GY=60,FX=50,SPG=8;
-  var pos={};
-  var genOrderMap={};
-  allM.forEach(function(m){ genOrderMap[m.id]=parseGenOrder(m.gen); });
-  var allGenValues=[...new Set(Object.values(genOrderMap).filter(function(v){return v<9000;}))].sort(function(a,b){return a-b;});
-  var genYMap={};
-  allGenValues.forEach(function(gv,idx){ genYMap[gv]=20+idx*(NH+GY); });
-
-  var memberYCache={};
-  function getMemberY(m,visited){
-    visited=visited||new Set();
-    if(memberYCache[m.id]!==undefined) return memberYCache[m.id];
-    if(visited.has(m.id)) return null;
-    visited.add(m.id);
-    var gv=genOrderMap[m.id];
-    if(gv&&gv<9000&&genYMap[gv]!==undefined) return memberYCache[m.id]=genYMap[gv];
-    var spEntry=Object.entries(partnerOf).find(function(e){return String(e[1].id)===String(m.id);});
-    var spouse=partnerOf[m.id]||(spEntry?allM.find(function(x){return String(x.id)===spEntry[0];}):null)||(m.spouse?byName[m.spouse]:null);
-    if(spouse){var spY=getMemberY(spouse,visited);if(spY!==null) return memberYCache[m.id]=spY;}
-    var kids=(childrenOf[m.name]||[]);
-    for(var i=0;i<kids.length;i++){
-      var kidY=getMemberY(kids[i],visited);
-      if(kidY!==null){
-        var kidGv=genOrderMap[kids[i].id];
-        if(kidGv&&kidGv<9000){var kidIdx=allGenValues.indexOf(kidGv);if(kidIdx>0) return memberYCache[m.id]=genYMap[allGenValues[kidIdx-1]];}
-        return memberYCache[m.id]=kidY-(NH+GY);
-      }
-    }
-    var maxY=allGenValues.length>0?genYMap[allGenValues[allGenValues.length-1]]:20;
-    return memberYCache[m.id]=maxY;
+  virtual.forEach(function(v){var pt=byName[v.spouseOf];if(pt&&!partnerOf[pt.id])partnerOf[pt.id]=v;});
+  var roots=members.filter(function(m){return!hasParent[m.id]&&!sideIds.has(m.id);});
+  var NW=36,NH=80,GY=60,FX=50,SPG=8,pos={};
+  var gom={};allMem.forEach(function(m){gom[m.id]=parseGenOrder(m.gen);});
+  var agv=[...new Set(Object.values(gom).filter(function(v){return v<9000;}))].sort(function(a,b){return a-b;});
+  var gym={};agv.forEach(function(gv,i){gym[gv]=20+i*(NH+GY);});
+  var myc={};
+  function gy(m,vis){
+    vis=vis||new Set();if(myc[m.id]!==undefined)return myc[m.id];if(vis.has(m.id))return null;vis.add(m.id);
+    var gv=gom[m.id];if(gv&&gv<9000&&gym[gv]!==undefined)return myc[m.id]=gym[gv];
+    var se=Object.entries(partnerOf).find(function(e){return String(e[1].id)===String(m.id);});
+    var sp=partnerOf[m.id]||(se?allMem.find(function(x){return String(x.id)===se[0];}):null)||(m.spouse?byName[m.spouse]:null);
+    if(sp){var sy=gy(sp,vis);if(sy!==null)return myc[m.id]=sy;}
+    var kd=(childrenOf[m.name]||[]);
+    for(var i=0;i<kd.length;i++){var ky=gy(kd[i],vis);if(ky!==null){var kg=gom[kd[i].id];if(kg&&kg<9000){var ki=agv.indexOf(kg);if(ki>0)return myc[m.id]=gym[agv[ki-1]];}return myc[m.id]=ky-(NH+GY);}}
+    return myc[m.id]=agv.length>0?gym[agv[agv.length-1]]:20;
   }
-
-  function layout(m,xStart){
-    var sp=partnerOf[m.id];
-    var spouseOnLeft=sp&&m.gender==='female'&&sp.gender==='male';
-    var coupleW=NW+(sp?SPG+NW:0);
-    var myChildren=(childrenOf[m.name]||[]).filter(function(c){return !sideSpouseIds.has(c.id);});
-    var spChildren=sp?(childrenOf[sp.name]||[]).filter(function(c){return !sideSpouseIds.has(c.id)&&!myChildren.find(function(x){return x.id===c.id;});}):[];
-    var children=[...myChildren,...spChildren];
-    var y=getMemberY(m)||20;
-    if(!children.length){
-      var pX=spouseOnLeft?xStart+NW+SPG:xStart;
-      pos[m.id]={x:pX,y:y};
-      if(sp){var sX=spouseOnLeft?xStart:xStart+NW+SPG;pos[sp.id]={x:sX,y:getMemberY(sp)||y};}
-      return coupleW;
-    }
-    var cx=xStart;
-    children.forEach(function(child,idx){
-      var cw=layout(child,cx);
-      cx+=cw;
-      if(idx<children.length-1) cx+=FX;
-    });
-    var childMidX=xStart+(cx-xStart)/2;
-    var coupleLeft=childMidX-coupleW/2;
-    if(coupleLeft<xStart){
-      var shift=xStart-coupleLeft;
-      coupleLeft=xStart;
-      function shiftSubtree(member){
-        if(pos[member.id]) pos[member.id].x+=shift;
-        var sp2=partnerOf[member.id];
-        if(sp2&&pos[sp2.id]) pos[sp2.id].x+=shift;
-        (childrenOf[member.name]||[]).filter(function(c){return !sideSpouseIds.has(c.id);}).forEach(shiftSubtree);
-      }
-      children.forEach(shiftSubtree);
-    }
-    var primaryX=spouseOnLeft?coupleLeft+NW+SPG:coupleLeft;
-    pos[m.id]={x:primaryX,y:y};
-    if(sp){var spX=spouseOnLeft?coupleLeft:coupleLeft+NW+SPG;pos[sp.id]={x:spX,y:getMemberY(sp)||y};}
-    function subtreeRight(member){
-      var r=pos[member.id]?pos[member.id].x+NW:xStart;
-      var sp2=partnerOf[member.id];
-      if(sp2&&pos[sp2.id]) r=Math.max(r,pos[sp2.id].x+NW);
-      (childrenOf[member.name]||[]).filter(function(c){return !sideSpouseIds.has(c.id);}).forEach(function(c){r=Math.max(r,subtreeRight(c));});
-      return r;
-    }
-    return subtreeRight(m)-xStart;
+  function layout(m,xS){
+    var sp=partnerOf[m.id],sol=sp&&m.gender==='female'&&sp.gender==='male',cW=NW+(sp?SPG+NW:0);
+    var mK=(childrenOf[m.name]||[]).filter(function(c){return!sideIds.has(c.id);});
+    var sK=sp?(childrenOf[sp.name]||[]).filter(function(c){return!sideIds.has(c.id)&&!mK.find(function(x){return x.id===c.id;});}):[];
+    var ch=mK.concat(sK),y=gy(m)||20;
+    if(!ch.length){var pX=sol?xS+NW+SPG:xS;pos[m.id]={x:pX,y:y};if(sp){var sX=sol?xS:xS+NW+SPG;pos[sp.id]={x:sX,y:gy(sp)||y};}return cW;}
+    var cx=xS;ch.forEach(function(c,i){cx+=layout(c,cx);if(i<ch.length-1)cx+=FX;});
+    var cl=xS+(cx-xS)/2-cW/2;
+    if(cl<xS){var sh=xS-cl;cl=xS;(function ss(mb){if(pos[mb.id])pos[mb.id].x+=sh;var sp2=partnerOf[mb.id];if(sp2&&pos[sp2.id])pos[sp2.id].x+=sh;(childrenOf[mb.name]||[]).filter(function(c){return!sideIds.has(c.id);}).forEach(ss);})(function(){ch.forEach(function(c){(function ss(mb){if(pos[mb.id])pos[mb.id].x+=sh;var sp2=partnerOf[mb.id];if(sp2&&pos[sp2.id])pos[sp2.id].x+=sh;(childrenOf[mb.name]||[]).filter(function(c){return!sideIds.has(c.id);}).forEach(ss);})(c);});return ch[0];}());}
+    // simpler shift
+    if(cl<xS){var sh2=xS-cl;cl=xS;function ssub(mb){if(pos[mb.id])pos[mb.id].x+=sh2;var s2=partnerOf[mb.id];if(s2&&pos[s2.id])pos[s2.id].x+=sh2;(childrenOf[mb.name]||[]).filter(function(c){return!sideIds.has(c.id);}).forEach(ssub);}ch.forEach(ssub);}
+    var pX=sol?cl+NW+SPG:cl;pos[m.id]={x:pX,y:y};if(sp){pos[sp.id]={x:sol?cl:cl+NW+SPG,y:gy(sp)||y};}
+    function sr(mb){var r=pos[mb.id]?pos[mb.id].x+NW:xS;var s2=partnerOf[mb.id];if(s2&&pos[s2.id])r=Math.max(r,pos[s2.id].x+NW);(childrenOf[mb.name]||[]).filter(function(c){return!sideIds.has(c.id);}).forEach(function(c){r=Math.max(r,sr(c));});return r;}
+    return sr(m)-xS;
   }
-
-  var rootX=20;
-  roots.forEach(function(r){ var w=layout(r,rootX); rootX+=w+FX*2; });
-
-  var maxX=0,maxY=0;
-  Object.values(pos).forEach(function(p){ maxX=Math.max(maxX,p.x+NW); maxY=Math.max(maxY,p.y+NH); });
-  var svgW=Math.max(500,maxX+40),svgH=Math.max(300,maxY+40);
-  svg.setAttribute('width',svgW); svg.setAttribute('height',svgH);
-  svg.style.transform='scale('+treeScale+')';
-  svg.style.transformOrigin='top left';
-
-  var h='';
-  var drawnLines=new Set();
+  var rx=20;roots.forEach(function(r){rx+=layout(r,rx)+FX*2;});
+  var mxX=0,mxY=0;Object.values(pos).forEach(function(p){mxX=Math.max(mxX,p.x+NW);mxY=Math.max(mxY,p.y+NH);});
+  var sW=Math.max(500,mxX+40),sH=Math.max(300,mxY+40);
+  svg.setAttribute('width',sW);svg.setAttribute('height',sH);svg.style.transform='scale('+treeScale+')';svg.style.transformOrigin='top left';
+  var h='',dl=new Set();
   members.forEach(function(m){
-    if(drawnLines.has(m.id)||!pos[m.id]) return;
-    var fN=m.father?byName[m.father]:null, mN=m.mother?byName[m.mother]:null;
-    var fP=fN?pos[fN.id]:null, mP=mN?pos[mN.id]:null;
-    var par=null,parPos=null;
-    if(fP&&mP){par=(hasParent[mN.id]&&!hasParent[fN.id])?mN:fN;parPos=(hasParent[mN.id]&&!hasParent[fN.id])?mP:fP;}
-    else if(fP){par=fN;parPos=fP;}
-    else if(mP){par=mN;parPos=mP;}
-    if(!par||!parPos) return;
-    drawnLines.add(m.id);
-    var px=parPos.x+NW/2,py=parPos.y+NH,cx2=pos[m.id].x+NW/2,cy=pos[m.id].y,midY=py+(cy-py)/2;
-    h+='<path d="M'+px+' '+py+' V'+midY+' H'+cx2+' V'+cy+'" fill="none" stroke="#6b5540" stroke-width="0.9"/>';
+    if(dl.has(m.id)||!pos[m.id])return;
+    var fn2=m.father?byName[m.father]:null,mn2=m.mother?byName[m.mother]:null,fp=fn2?pos[fn2.id]:null,mp=mn2?pos[mn2.id]:null;
+    var par=null,pp=null;
+    if(fp&&mp){par=(hasParent[mn2.id]&&!hasParent[fn2.id])?mn2:fn2;pp=(hasParent[mn2.id]&&!hasParent[fn2.id])?mp:fp;}
+    else if(fp){par=fn2;pp=fp;}else if(mp){par=mn2;pp=mp;}
+    if(!par||!pp)return;dl.add(m.id);
+    var px2=pp.x+NW/2,py=pp.y+NH,cx2=pos[m.id].x+NW/2,cy=pos[m.id].y,my=py+(cy-py)/2;
+    h+='<path d="M'+px2+' '+py+' V'+my+' H'+cx2+' V'+cy+'" fill="none" stroke="#6b5540" stroke-width="0.9"/>';
   });
   Object.entries(partnerOf).forEach(function(e){
-    var mid=e[0],sp2=e[1];
-    var primary=allM.find(function(x){return String(x.id)===String(mid);});
-    if(!primary||!pos[primary.id]||!pos[sp2.id]) return;
-    var lN=pos[primary.id].x<pos[sp2.id].x?primary:sp2;
-    var rN=pos[primary.id].x<pos[sp2.id].x?sp2:primary;
+    var pri2=allMem.find(function(x){return String(x.id)===String(e[0]);}),sp2=e[1];
+    if(!pri2||!pos[pri2.id]||!pos[sp2.id])return;
+    var lN=pos[pri2.id].x<pos[sp2.id].x?pri2:sp2,rN=pos[pri2.id].x<pos[sp2.id].x?sp2:pri2;
     var x1=pos[lN.id].x+NW,x2=pos[rN.id].x;
-    if(x2>x1){var my=pos[primary.id].y+NH/2;
-      h+='<line x1="'+x1+'" y1="'+my+'" x2="'+x2+'" y2="'+my+'" stroke="#c43a3a" stroke-width="1" stroke-dasharray="3 2" opacity="0.85"/>';
-      h+='<text x="'+((x1+x2)/2)+'" y="'+(my+4)+'" text-anchor="middle" font-size="9" fill="#c43a3a">♥</text>';
-    }
+    if(x2>x1){var my2=pos[pri2.id].y+NH/2;h+='<line x1="'+x1+'" y1="'+my2+'" x2="'+x2+'" y2="'+my2+'" stroke="#c43a3a" stroke-width="1" stroke-dasharray="3 2" opacity="0.85"/><text x="'+((x1+x2)/2)+'" y="'+(my2+4)+'" text-anchor="middle" font-size="9" fill="#c43a3a">♥</text>';}
   });
-  allM.forEach(function(m){
-    var p=pos[m.id]; if(!p) return;
-    var isVirt=m.virtual,isMale=m.gender==='male',isDead=!!m.death;
-    var bg=isVirt?(isMale?'#F4F6FD':'#FDF4F7'):(isMale?'#EEF3FC':'#FCF0F3');
-    var stroke=isVirt?(isMale?'#7090C0':'#C07090'):(isMale?'#7090C0':'#C07090');
-    var tc=isDead?'#666':(isMale?'#2a4a8a':'#8a2a50');
-    var dash=isVirt?'stroke-dasharray="5 3"':'';
-    var op=isVirt?'opacity="0.85"':'';
-    var fn2=isVirt?'':('openModal(\''+m.id+'\')');
-    var hFn=isVirt?'':('onmouseenter="showTreeTip(event,\''+m.id+'\')" onmouseleave="hideTreeTip()"');
-    h+='<g onclick="'+fn2+'" style="cursor:'+(fn2?'pointer':'default')+'" '+op+' '+hFn+'>';
-    h+='<rect x="'+p.x+'" y="'+p.y+'" width="'+NW+'" height="'+NH+'" rx="4" fill="'+bg+'" stroke="'+stroke+'" stroke-width="0.8" '+dash+'/>';
-    if(isDead&&!isVirt) h+='<rect x="'+p.x+'" y="'+p.y+'" width="'+NW+'" height="2" rx="1" fill="#aaa"/>';
-    var label=isVirt?'配偶':(m.gen?m.gen.replace('第','').substring(0,3):'');
-    if(label) h+='<text x="'+(p.x+NW/2)+'" y="'+(p.y+9)+'" text-anchor="middle" font-size="7" fill="#6b5540" font-family="Noto Sans SC,sans-serif">'+label+'</text>';
-    var topOff=(isDead?2:0)+(label?10:3);
-    var chars=m.name.split(''),charH=13,totalH=chars.length*charH;
-    var startY=p.y+topOff+Math.max(0,(NH-topOff-10-totalH)/2)+charH;
-    if(isDead&&!isVirt) h+='<text x="'+(p.x+NW/2)+'" y="'+(startY-charH+2)+'" text-anchor="middle" font-size="8" fill="#999">✝</text>';
-    chars.forEach(function(ch,i){
-      h+='<text x="'+(p.x+NW/2)+'" y="'+(startY+i*charH)+'" text-anchor="middle" font-size="13" font-weight="600" fill="'+tc+'" font-family="Noto Serif SC,serif">'+ch+'</text>';
-    });
+  allMem.forEach(function(m){
+    var p=pos[m.id];if(!p)return;
+    var iv=m.virtual,im=m.gender==='male',id2=!!m.death;
+    var bg=iv?(im?'#F4F6FD':'#FDF4F7'):(im?'#EEF3FC':'#FCF0F3');
+    var st=iv?(im?'#7090C0':'#C07090'):(im?'#7090C0':'#C07090');
+    var tc=id2?'#666':(im?'#2a4a8a':'#8a2a50');
+    var da=iv?'stroke-dasharray="5 3"':'';
+    var mid2=m.id;
+    // Use data attribute on the group for tooltip, no inline onclick
+    var hoverAttr=iv?'':('onmouseenter="showTreeTip(event,\'' + mid2 + '\')" onmouseleave="hideTreeTip()"');
+    var clickAttr=iv?'':('data-id="'+mid2+'"');
+    h+='<g '+clickAttr+' style="cursor:'+(iv?'default':'pointer')+'" '+hoverAttr+'>';
+    h+='<rect x="'+p.x+'" y="'+p.y+'" width="'+NW+'" height="'+NH+'" rx="4" fill="'+bg+'" stroke="'+st+'" stroke-width="0.8" '+da+'/>';
+    if(id2&&!iv)h+='<rect x="'+p.x+'" y="'+p.y+'" width="'+NW+'" height="2" rx="1" fill="#aaa"/>';
+    var lb=iv?'配偶':(m.gen?m.gen.replace('第','').substring(0,3):'');
+    if(lb)h+='<text x="'+(p.x+NW/2)+'" y="'+(p.y+9)+'" text-anchor="middle" font-size="7" fill="#6b5540">'+lb+'</text>';
+    var to=(id2?2:0)+(lb?10:3),chars=m.name.split(''),cH=13,tH=chars.length*cH;
+    var sy=p.y+to+Math.max(0,(NH-to-10-tH)/2)+cH;
+    if(id2&&!iv)h+='<text x="'+(p.x+NW/2)+'" y="'+(sy-cH+2)+'" text-anchor="middle" font-size="8" fill="#999">✝</text>';
+    chars.forEach(function(ch,i){h+='<text x="'+(p.x+NW/2)+'" y="'+(sy+i*cH)+'" text-anchor="middle" font-size="13" font-weight="600" fill="'+tc+'" font-family="Noto Serif SC,serif">'+ch+'</text>';});
     h+='</g>';
   });
+  // Tree node clicks via event delegation on the SVG
+  svg.addEventListener('click', function(e) {
+    var g = e.target.closest('g[data-id]');
+    if (g) openModal(g.dataset.id);
+  }, { once: false });
   svg.innerHTML=h;
+  // Re-attach since innerHTML reset the svg
+  svg.addEventListener('click', function(e) { var g=e.target.closest('g[data-id]'); if(g) openModal(g.dataset.id); });
 }
-function doZoom(f){ treeScale=f===1?1:Math.max(0.3,Math.min(3,treeScale*f)); var s=document.getElementById('tree-svg'); if(s) s.style.transform='scale('+treeScale+')'; }
+function doZoom(f){treeScale=f===1?1:Math.max(0.3,Math.min(3,treeScale*f));var s=document.getElementById('tree-svg');if(s)s.style.transform='scale('+treeScale+')';}
 
-// ── Timeline ──────────────────────────────────────────────────────────────
+// ── Timeline ─────────────────────────────────────────────────────────────
 function setTlFilter(type){
   tlFilter=type;
-  document.querySelectorAll('.tl-filter').forEach(function(b){ b.classList.toggle('active',b.getAttribute('data-filter')===type); });
+  document.querySelectorAll('.tl-filter').forEach(function(b){b.classList.toggle('active',b.dataset.filter===type);});
   renderTimeline();
 }
 function renderTimeline(){
-  var wrap=document.getElementById('timeline-wrap'); if(!wrap) return;
-  var events=[];
+  var wrap=document.getElementById('timeline-wrap');if(!wrap)return;
+  var evts=[];
   members.forEach(function(m){
-    if(m.birth){var y=parseInt(m.birth);if(!isNaN(y)) events.push({year:y,type:'birth',name:m.name,gen:m.gen||'',detail:(m.gen||'')+(m.hometown?' · '+m.hometown:''),id:m.id});}
-    if(m.death){var y2=parseInt(m.death);if(!isNaN(y2)){var age=(m.birth&&!isNaN(parseInt(m.birth)))?(y2-parseInt(m.birth))+'岁':'';events.push({year:y2,type:'death',name:m.name,gen:m.gen||'',detail:age?'享年 '+age:'',id:m.id});}}
+    if(m.birth){var y=parseInt(m.birth);if(!isNaN(y))evts.push({year:y,type:'birth',name:m.name,gen:m.gen||'',detail:(m.gen||'')+(m.hometown?' · '+m.hometown:''),id:m.id});}
+    if(m.death){var y2=parseInt(m.death);if(!isNaN(y2)){var age=(m.birth&&!isNaN(parseInt(m.birth)))?(y2-parseInt(m.birth))+'岁':'';evts.push({year:y2,type:'death',name:m.name,gen:m.gen||'',detail:age?'享年 '+age:'',id:m.id});}}
   });
-  if(tlFilter!=='all') events=events.filter(function(e){return e.type===tlFilter;});
-  if(!events.length){wrap.innerHTML='<div class="empty"><div class="empty-icon">⏳</div><h3>暂无数据</h3></div>';return;}
-  events.sort(function(a,b){return a.year-b.year;});
-  var groups={};
-  events.forEach(function(e){var d=Math.floor(e.year/10)*10;if(!groups[d]) groups[d]=[];groups[d].push(e);});
-  var typeLabel={birth:'出生',death:'去世'};
+  if(tlFilter!=='all')evts=evts.filter(function(e){return e.type===tlFilter;});
+  if(!evts.length){wrap.innerHTML='<div class="empty"><div class="empty-icon">⏳</div><h3>暂无数据</h3></div>';return;}
+  evts.sort(function(a,b){return a.year-b.year;});
+  var grp={};evts.forEach(function(e){var d=Math.floor(e.year/10)*10;if(!grp[d])grp[d]=[];grp[d].push(e);});
+  var lbl={birth:'出生',death:'去世'};
   var html='';
-  Object.keys(groups).sort(function(a,b){return a-b;}).forEach(function(decade){
-    html+='<div class="tl-year-group"><div class="tl-year-badge">'+decade+'—'+(parseInt(decade)+9)+'</div><div class="tl-line">';
-    groups[decade].forEach(function(e){
-      html+='<div class="tl-event-row ev-'+e.type+'" onclick="openModal(\''+e.id+'\')"><div class="tl-event-type">'+e.year+' · '+typeLabel[e.type]+'</div><div class="tl-event-name">'+e.name+'</div>'+(e.detail?'<div class="tl-event-detail">'+e.detail+'</div>':'')+'</div>';
+  Object.keys(grp).sort(function(a,b){return a-b;}).forEach(function(dec){
+    html+='<div class="tl-year-group"><div class="tl-year-badge">'+dec+'—'+(parseInt(dec)+9)+'</div><div class="tl-line">';
+    grp[dec].forEach(function(e){
+      html+='<div class="tl-event-row ev-'+e.type+'" data-id="'+e.id+'"><div class="tl-event-type">'+e.year+' · '+lbl[e.type]+'</div><div class="tl-event-name">'+e.name+'</div>'+(e.detail?'<div class="tl-event-detail">'+e.detail+'</div>':'')+'</div>';
     });
     html+='</div></div>';
   });
@@ -5110,173 +4954,113 @@ function renderTimeline(){
 // ── Family chart ──────────────────────────────────────────────────────────
 function famSearch(){
   var q=(document.getElementById('fam-search').value||'').trim();
-  var res=document.getElementById('fam-results'); if(!res) return;
+  var res=document.getElementById('fam-results');if(!res)return;
   if(!q){res.innerHTML='';return;}
   var matched=members.filter(function(m){return m.name&&m.name.indexOf(q)!==-1;}).slice(0,12);
-  res.innerHTML=matched.map(function(m){return '<div class="fam-chip" onclick="renderFamilyChart(\''+m.id+'\')">'+m.name+(m.gen?' <span style="font-size:10px;opacity:.7">'+m.gen+'</span>':'')+'</div>';}).join('');
-  if(!matched.length) res.innerHTML='<div style="font-size:12px;color:#6b5540">未找到</div>';
+  res.innerHTML=matched.map(function(m){return '<div class="fam-chip" data-id="'+m.id+'">'+m.name+(m.gen?' <span style="font-size:10px;opacity:.7">'+m.gen+'</span>':'')+'</div>';}).join('');
+  if(!matched.length)res.innerHTML='<div style="font-size:12px;color:#6b5540">未找到</div>';
 }
 function renderFamilyChart(memberId){
-  var wrap=document.getElementById('family-svg-wrap'); if(!wrap) return;
-  document.querySelectorAll('.fam-chip').forEach(function(c){c.classList.toggle('selected',c.getAttribute('onclick').indexOf(memberId)!==-1);});
-  var all=allMembers();
-  var m=all.find(function(x){return String(x.id)===String(memberId);}); if(!m) return;
+  var wrap=document.getElementById('family-svg-wrap');if(!wrap)return;
+  document.querySelectorAll('.fam-chip').forEach(function(c){c.classList.toggle('selected',c.dataset.id===memberId);});
+  var all=allM(),m=all.find(function(x){return String(x.id)===String(memberId);});if(!m)return;
   var father=m.father?all.find(function(x){return x.name===m.father&&!x.virtual;}):null;
   var mother=m.mother?all.find(function(x){return x.name===m.mother&&!x.virtual;}):null;
-  var children=all.filter(function(x){return !x.virtual&&(x.father===m.name||x.mother===m.name);});
-  var NW=70,NH=36,GAP=20,HGAP=40;
-  var Y_PARENT=20,Y_SELF=Y_PARENT+NH+HGAP,Y_CHILD=Y_SELF+NH+HGAP;
-  var maxCols=Math.max((father?1:0)+(mother?1:0),1,children.length,1);
-  var svgW=Math.max(maxCols*(NW+GAP)+GAP,280),svgH=Y_CHILD+NH+30;
-  function cx2(col,total){var gW=total*NW+(total-1)*GAP;var sX=(svgW-gW)/2;return sX+col*(NW+GAP);}
-  function nodeBox(x,y,person,isMain){
-    if(!person) return '';
-    var isDead=!!person.death,isMale=person.gender==='male';
-    var bg=isMain?'#FDF6EC':(isDead?'#f7f5f2':(isMale?'#EEF3FC':'#FCF0F3'));
-    var stroke=isMain?'#c8882a':(isDead?'#aaa':(isMale?'#7090C0':'#C07090'));
-    var fn3=person.id?'openModal(\''+person.id+'\')':'';
-    var s='<g onclick="'+fn3+'" style="cursor:'+(fn3?'pointer':'default')+'">';
-    s+='<rect x="'+x+'" y="'+y+'" width="'+NW+'" height="'+NH+'" rx="5" fill="'+bg+'" stroke="'+stroke+'" stroke-width="'+(isMain?2:1)+'"/>';
-    if(isMain) s+='<rect x="'+x+'" y="'+y+'" width="'+NW+'" height="2.5" rx="1.5" fill="#c8882a"/>';
-    if(person.gen) s+='<text x="'+(x+NW/2)+'" y="'+(y+10)+'" text-anchor="middle" font-size="7" fill="#6b5540">'+person.gen+'</text>';
-    var nY=person.gen?y+23:y+21;
-    s+='<text x="'+(x+NW/2)+'" y="'+nY+'" text-anchor="middle" font-size="12" font-weight="700" fill="'+(isDead?'#666':'#1a1209')+'">'+person.name+'</text>';
-    if(isDead) s+='<text x="'+(x+NW/2)+'" y="'+(y+NH-3)+'" text-anchor="middle" font-size="7" fill="#aaa">✝</text>';
-    s+='</g>'; return s;
+  var children=all.filter(function(x){return!x.virtual&&(x.father===m.name||x.mother===m.name);});
+  var NW2=70,NH2=36,GAP=20,HG=40,YP=20,YS=YP+NH2+HG,YC=YS+NH2+HG;
+  var mc=Math.max((father?1:0)+(mother?1:0),1,children.length,1);
+  var sW=Math.max(mc*(NW2+GAP)+GAP,280),sH=YC+NH2+30;
+  function cx2(col,tot){var gW=tot*NW2+(tot-1)*GAP;return(sW-gW)/2+col*(NW2+GAP);}
+  function nb(x,y,person,isMain){
+    if(!person)return'';var id2=!!person.death,im2=person.gender==='male';
+    var bg=isMain?'#FDF6EC':(id2?'#f7f5f2':(im2?'#EEF3FC':'#FCF0F3'));
+    var st=isMain?'#c8882a':(id2?'#aaa':(im2?'#7090C0':'#C07090'));
+    var di=person.id?' data-id="'+person.id+'"':'';
+    var s='<g'+di+' style="cursor:'+(person.id?'pointer':'default')+'">';
+    s+='<rect x="'+x+'" y="'+y+'" width="'+NW2+'" height="'+NH2+'" rx="5" fill="'+bg+'" stroke="'+st+'" stroke-width="'+(isMain?2:1)+'"/>';
+    if(isMain)s+='<rect x="'+x+'" y="'+y+'" width="'+NW2+'" height="2.5" rx="1.5" fill="#c8882a"/>';
+    if(person.gen)s+='<text x="'+(x+NW2/2)+'" y="'+(y+10)+'" text-anchor="middle" font-size="7" fill="#6b5540">'+person.gen+'</text>';
+    var ny=person.gen?y+23:y+21;
+    s+='<text x="'+(x+NW2/2)+'" y="'+ny+'" text-anchor="middle" font-size="12" font-weight="700" fill="'+(id2?'#666':'#1a1209')+'">'+person.name+'</text>';
+    if(id2)s+='<text x="'+(x+NW2/2)+'" y="'+(y+NH2-3)+'" text-anchor="middle" font-size="7" fill="#aaa">✝</text>';
+    return s+'</g>';
   }
   var h2='';
-  var pNodes=[];
-  if(father) pNodes.push({person:father});
-  else if(m.father) pNodes.push({person:{name:m.father,id:null},virtual:true});
-  if(mother) pNodes.push({person:mother});
-  else if(m.mother) pNodes.push({person:{name:m.mother,id:null},virtual:true});
-  pNodes.forEach(function(n,i){
-    var x=cx2(i,pNodes.length);
-    if(n.virtual) h2+='<rect x="'+x+'" y="'+Y_PARENT+'" width="'+NW+'" height="'+NH+'" rx="5" fill="#fafafa" stroke="#ccc" stroke-width="1" stroke-dasharray="4 3"/><text x="'+(x+NW/2)+'" y="'+(Y_PARENT+NH/2+4)+'" text-anchor="middle" font-size="10" fill="#bbb">'+n.person.name+'</text>';
-    else h2+=nodeBox(x,Y_PARENT,n.person,false);
-  });
-  var selfX=cx2(0,1);
-  h2+=nodeBox(selfX,Y_SELF,m,true);
-  if(m.spouse) h2+='<text x="'+(selfX+NW/2)+'" y="'+(Y_SELF+NH+14)+'" text-anchor="middle" font-size="10" fill="#c43a3a">♥ '+m.spouse+'</text>';
-  var childXs=[];
-  children.forEach(function(c,i){ var x=cx2(i,children.length); childXs.push(x+NW/2); h2+=nodeBox(x,Y_CHILD,c,false); });
-  var selfMidX=cx2(0,1)+NW/2,midY_ps=Y_PARENT+NH+HGAP/2;
-  if(pNodes.length){
-    var pMidX=(cx2(0,pNodes.length)+NW/2+cx2(pNodes.length-1,pNodes.length)+NW/2)/2;
-    h2+='<line x1="'+pMidX+'" y1="'+(Y_PARENT+NH)+'" x2="'+pMidX+'" y2="'+midY_ps+'" stroke="#c8882a" stroke-width="1.2" stroke-dasharray="4 2"/>';
-    h2+='<line x1="'+pMidX+'" y1="'+midY_ps+'" x2="'+selfMidX+'" y2="'+midY_ps+'" stroke="#c8882a" stroke-width="1.2" stroke-dasharray="4 2"/>';
-    h2+='<line x1="'+selfMidX+'" y1="'+midY_ps+'" x2="'+selfMidX+'" y2="'+Y_SELF+'" stroke="#c8882a" stroke-width="1.2" stroke-dasharray="4 2"/>';
-  }
-  if(childXs.length){
-    var midY_sc=Y_SELF+NH+HGAP/2;
-    h2+='<line x1="'+selfMidX+'" y1="'+(Y_SELF+NH)+'" x2="'+selfMidX+'" y2="'+midY_sc+'" stroke="#7090C0" stroke-width="1.2"/>';
-    if(childXs.length>1) h2+='<line x1="'+childXs[0]+'" y1="'+midY_sc+'" x2="'+childXs[childXs.length-1]+'" y2="'+midY_sc+'" stroke="#7090C0" stroke-width="1.2"/>';
-    childXs.forEach(function(cx3){ h2+='<line x1="'+cx3+'" y1="'+midY_sc+'" x2="'+cx3+'" y2="'+Y_CHILD+'" stroke="#7090C0" stroke-width="1.2"/>'; });
-  }
-  wrap.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="'+svgW+'" height="'+svgH+'">'+h2+'</svg>';
+  var pN=[];
+  if(father)pN.push({p:father});else if(m.father)pN.push({p:{name:m.father,id:null},v:true});
+  if(mother)pN.push({p:mother});else if(m.mother)pN.push({p:{name:m.mother,id:null},v:true});
+  pN.forEach(function(n,i){var x=cx2(i,pN.length);if(n.v)h2+='<rect x="'+x+'" y="'+YP+'" width="'+NW2+'" height="'+NH2+'" rx="5" fill="#fafafa" stroke="#ccc" stroke-dasharray="4 3" stroke-width="1"/><text x="'+(x+NW2/2)+'" y="'+(YP+NH2/2+4)+'" text-anchor="middle" font-size="10" fill="#bbb">'+n.p.name+'</text>';else h2+=nb(x,YP,n.p,false);});
+  h2+=nb(cx2(0,1),YS,m,true);
+  if(m.spouse)h2+='<text x="'+(cx2(0,1)+NW2/2)+'" y="'+(YS+NH2+14)+'" text-anchor="middle" font-size="10" fill="#c43a3a">♥ '+m.spouse+'</text>';
+  var cXs=[];children.forEach(function(c,i){var x=cx2(i,children.length);cXs.push(x+NW2/2);h2+=nb(x,YC,c,false);});
+  var smX=cx2(0,1)+NW2/2,mpY=YP+NH2+HG/2;
+  if(pN.length){var pmX=(cx2(0,pN.length)+NW2/2+cx2(pN.length-1,pN.length)+NW2/2)/2;h2+='<line x1="'+pmX+'" y1="'+(YP+NH2)+'" x2="'+pmX+'" y2="'+mpY+'" stroke="#c8882a" stroke-width="1.2" stroke-dasharray="4 2"/><line x1="'+pmX+'" y1="'+mpY+'" x2="'+smX+'" y2="'+mpY+'" stroke="#c8882a" stroke-width="1.2" stroke-dasharray="4 2"/><line x1="'+smX+'" y1="'+mpY+'" x2="'+smX+'" y2="'+YS+'" stroke="#c8882a" stroke-width="1.2" stroke-dasharray="4 2"/>';}
+  if(cXs.length){var csY=YS+NH2+HG/2;h2+='<line x1="'+smX+'" y1="'+(YS+NH2)+'" x2="'+smX+'" y2="'+csY+'" stroke="#7090C0" stroke-width="1.2"/>';if(cXs.length>1)h2+='<line x1="'+cXs[0]+'" y1="'+csY+'" x2="'+cXs[cXs.length-1]+'" y2="'+csY+'" stroke="#7090C0" stroke-width="1.2"/>';cXs.forEach(function(cx3){h2+='<line x1="'+cx3+'" y1="'+csY+'" x2="'+cx3+'" y2="'+YC+'" stroke="#7090C0" stroke-width="1.2"/>'; });}
+  var svgEl='<svg xmlns="http://www.w3.org/2000/svg" width="'+sW+'" height="'+sH+'">'+h2+'</svg>';
+  wrap.innerHTML=svgEl;
+  // Click delegation for family chart nodes
+  wrap.querySelector('svg').addEventListener('click', function(e) { var g=e.target.closest('g[data-id]'); if(g) openModal(g.dataset.id); });
 }
 
 // ── Statistics ────────────────────────────────────────────────────────────
 function renderStats(){
-  var all=members;
-  if(!all.length) return;
-  var deceased=all.filter(function(m){return !!m.death;});
-  var alive=all.filter(function(m){return !m.death;});
-  var withLS=all.filter(function(m){return m.birth&&m.death&&!isNaN(parseInt(m.birth))&&!isNaN(parseInt(m.death));});
-  var avgLS=withLS.length?Math.round(withLS.reduce(function(s,m){return s+parseInt(m.death)-parseInt(m.birth);},0)/withLS.length):0;
-  var gens=new Set(all.map(function(m){return m.gen;}).filter(Boolean));
-  var cards=[
-    {label:'族员总数',val:all.length},{label:'世代数',val:gens.size},
-    {label:'已故人数',val:deceased.length},{label:'健在人数',val:alive.length},
-    {label:'平均寿命',val:avgLS?avgLS+'岁':'--'},{label:'照片数量',val:photos.length},
-  ];
+  var all=members;if(!all.length)return;
+  var dec=all.filter(function(m){return!!m.death;}),alv=all.filter(function(m){return!m.death;});
+  var wl=all.filter(function(m){return m.birth&&m.death&&!isNaN(parseInt(m.birth))&&!isNaN(parseInt(m.death));});
+  var avg=wl.length?Math.round(wl.reduce(function(s,m){return s+parseInt(m.death)-parseInt(m.birth);},0)/wl.length):0;
+  var gs=new Set(all.map(function(m){return m.gen;}).filter(Boolean));
+  var cards=[{l:'族员总数',v:all.length},{l:'世代数',v:gs.size},{l:'已故人数',v:dec.length},{l:'健在人数',v:alv.length},{l:'平均寿命',v:avg?avg+'岁':'--'},{l:'照片数量',v:photos.length}];
   var el=document.getElementById('stats-cards');
-  if(el) el.innerHTML=cards.map(function(c){return '<div class="stat-card"><div class="stat-big">'+c.val+'</div><div class="stat-label">'+c.label+'</div></div>';}).join('');
-  function renderBar(elId,data,maxVal){
-    var el2=document.getElementById(elId); if(!el2) return;
-    el2.innerHTML=data.map(function(d){var pct=maxVal>0?Math.round(d.v/maxVal*100):0;return '<div class="bar-row"><div class="bar-label" title="'+d.k+'">'+d.k+'</div><div class="bar-track"><div class="bar-fill" style="width:'+pct+'%"><span class="bar-count">'+d.v+'</span></div></div></div>';}).join('');
-  }
-  var genMap={};
-  all.forEach(function(m){if(!m.gen) return;genMap[m.gen]=(genMap[m.gen]||0)+1;});
-  var genData=Object.keys(genMap).sort(function(a,b){return parseGenOrder(a)-parseGenOrder(b);}).map(function(k){return{k:k,v:genMap[k]};});
-  renderBar('chart-gen',genData,Math.max.apply(null,genData.map(function(d){return d.v;}).concat([1])));
-  var locMap={};
-  all.forEach(function(m){if(!m.location) return;locMap[m.location]=(locMap[m.location]||0)+1;});
-  var locData=Object.keys(locMap).map(function(k){return{k:k,v:locMap[k]};}).sort(function(a,b){return b.v-a.v;}).slice(0,10);
-  renderBar('chart-loc',locData,locData.length?Math.max.apply(null,locData.map(function(d){return d.v;})):1);
-  var decMap={};
-  all.forEach(function(m){if(!m.birth) return;var y=parseInt(m.birth);if(isNaN(y)) return;var d=Math.floor(y/10)*10+'s';decMap[d]=(decMap[d]||0)+1;});
-  var decData=Object.keys(decMap).sort().map(function(k){return{k:k,v:decMap[k]};});
-  renderBar('chart-decade',decData,decData.length?Math.max.apply(null,decData.map(function(d){return d.v;})):1);
-  function drawPie(canvasId,data,legendId){
-    var canvas=document.getElementById(canvasId),legend=document.getElementById(legendId);
-    if(!canvas) return;
-    var total=data.reduce(function(s,d){return s+d.val;},0); if(!total) return;
-    var ctx=canvas.getContext('2d'),cx4=canvas.width/2,cy4=canvas.height/2,r=42;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    var start=-Math.PI/2;
-    data.forEach(function(d){var angle=(d.val/total)*Math.PI*2;ctx.beginPath();ctx.moveTo(cx4,cy4);ctx.arc(cx4,cy4,r,start,start+angle);ctx.closePath();ctx.fillStyle=d.color;ctx.fill();start+=angle;});
-    ctx.beginPath();ctx.arc(cx4,cy4,22,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();
-    if(legend) legend.innerHTML=data.map(function(d){var pct=Math.round(d.val/total*100);return '<div class="pie-item"><div class="pie-dot" style="background:'+d.color+'"></div><span>'+d.label+' <b>'+pct+'%</b> ('+d.val+')</span></div>';}).join('');
-  }
-  var male=all.filter(function(m){return m.gender==='male';}).length;
-  var female=all.filter(function(m){return m.gender==='female';}).length;
-  var unknownG=all.length-male-female;
-  var gd=[];
-  if(male) gd.push({label:'男',val:male,color:'#7090C0'});
-  if(female) gd.push({label:'女',val:female,color:'#C07090'});
-  if(unknownG) gd.push({label:'未知',val:unknownG,color:'#ccc'});
-  drawPie('pie-gender',gd,'legend-gender');
-  var ad=[];
-  if(alive.length) ad.push({label:'健在',val:alive.length,color:'#c8882a'});
-  if(deceased.length) ad.push({label:'已故',val:deceased.length,color:'#888'});
-  drawPie('pie-alive',ad,'legend-alive');
+  if(el)el.innerHTML=cards.map(function(c){return'<div class="stat-card"><div class="stat-big">'+c.v+'</div><div class="stat-label">'+c.l+'</div></div>';}).join('');
+  function rb(eid,data,mx){var e2=document.getElementById(eid);if(!e2)return;e2.innerHTML=data.map(function(d){var p=mx>0?Math.round(d.v/mx*100):0;return'<div class="bar-row"><div class="bar-label" title="'+d.k+'">'+d.k+'</div><div class="bar-track"><div class="bar-fill" style="width:'+p+'%"><span class="bar-count">'+d.v+'</span></div></div></div>';}).join('');}
+  var gm={};all.forEach(function(m){if(!m.gen)return;gm[m.gen]=(gm[m.gen]||0)+1;});
+  var gd=Object.keys(gm).sort(function(a,b){return parseGenOrder(a)-parseGenOrder(b);}).map(function(k){return{k:k,v:gm[k]};});
+  rb('chart-gen',gd,Math.max.apply(null,gd.map(function(d){return d.v;}).concat([1])));
+  var lm={};all.forEach(function(m){if(!m.location)return;lm[m.location]=(lm[m.location]||0)+1;});
+  var ld=Object.keys(lm).map(function(k){return{k:k,v:lm[k]};}).sort(function(a,b){return b.v-a.v;}).slice(0,10);
+  rb('chart-loc',ld,ld.length?Math.max.apply(null,ld.map(function(d){return d.v;})):1);
+  var dm={};all.forEach(function(m){if(!m.birth)return;var y=parseInt(m.birth);if(isNaN(y))return;var d=Math.floor(y/10)*10+'s';dm[d]=(dm[d]||0)+1;});
+  var dd=Object.keys(dm).sort().map(function(k){return{k:k,v:dm[k]};});
+  rb('chart-decade',dd,dd.length?Math.max.apply(null,dd.map(function(d){return d.v;})):1);
+  function dp(cid,data,lid){var cv=document.getElementById(cid),lv=document.getElementById(lid);if(!cv)return;var tot=data.reduce(function(s,d){return s+d.val;},0);if(!tot)return;var ctx=cv.getContext('2d'),cx4=cv.width/2,cy4=cv.height/2,r=42;ctx.clearRect(0,0,cv.width,cv.height);var st2=-Math.PI/2;data.forEach(function(d){var a=(d.val/tot)*Math.PI*2;ctx.beginPath();ctx.moveTo(cx4,cy4);ctx.arc(cx4,cy4,r,st2,st2+a);ctx.closePath();ctx.fillStyle=d.color;ctx.fill();st2+=a;});ctx.beginPath();ctx.arc(cx4,cy4,22,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();if(lv)lv.innerHTML=data.map(function(d){var p=Math.round(d.val/tot*100);return'<div class="pie-item"><div class="pie-dot" style="background:'+d.color+'"></div><span>'+d.label+' <b>'+p+'%</b> ('+d.val+')</span></div>';}).join('');}
+  var ml=all.filter(function(m){return m.gender==='male';}).length,fl=all.filter(function(m){return m.gender==='female';}).length,ul=all.length-ml-fl;
+  var gda=[];if(ml)gda.push({label:'男',val:ml,color:'#7090C0'});if(fl)gda.push({label:'女',val:fl,color:'#C07090'});if(ul)gda.push({label:'未知',val:ul,color:'#ccc'});
+  dp('pie-gender',gda,'legend-gender');
+  var ada=[];if(alv.length)ada.push({label:'健在',val:alv.length,color:'#c8882a'});if(dec.length)ada.push({label:'已故',val:dec.length,color:'#888'});
+  dp('pie-alive',ada,'legend-alive');
 }
 
 // ── Map ───────────────────────────────────────────────────────────────────
-const GEO_DICT = {"北京市":[39.905,116.391],"北京":[39.905,116.391],"上海市":[31.230,121.473],"上海":[31.230,121.473],"天津市":[39.125,117.190],"天津":[39.125,117.190],"重庆市":[29.563,106.551],"重庆":[29.563,106.551],"广东省":[23.130,113.264],"广东":[23.130,113.264],"广州市":[23.130,113.264],"广州":[23.130,113.264],"深圳市":[22.543,114.058],"深圳":[22.543,114.058],"东莞市":[23.020,113.751],"东莞":[23.020,113.751],"佛山市":[23.021,113.122],"佛山":[23.021,113.122],"珠海市":[22.270,113.577],"珠海":[22.270,113.577],"中山市":[22.516,113.393],"中山":[22.516,113.393],"惠州市":[23.111,114.416],"惠州":[23.111,114.416],"浙江省":[30.274,120.155],"浙江":[30.274,120.155],"杭州市":[30.274,120.155],"杭州":[30.274,120.155],"宁波市":[29.868,121.544],"宁波":[29.868,121.544],"温州市":[28.000,120.672],"温州":[28.000,120.672],"江苏省":[32.061,118.796],"江苏":[32.061,118.796],"南京市":[32.061,118.796],"南京":[32.061,118.796],"苏州市":[31.298,120.585],"苏州":[31.298,120.585],"无锡市":[31.570,120.300],"无锡":[31.570,120.300],"湖南省":[28.228,112.939],"湖南":[28.228,112.939],"长沙市":[28.228,112.939],"长沙":[28.228,112.939],"株洲市":[27.830,113.134],"株洲":[27.830,113.134],"湘潭市":[27.853,112.944],"湘潭":[27.853,112.944],"湖北省":[30.593,114.305],"湖北":[30.593,114.305],"武汉市":[30.593,114.305],"武汉":[30.593,114.305],"四川省":[30.659,104.065],"四川":[30.659,104.065],"成都市":[30.659,104.065],"成都":[30.659,104.065],"山东省":[36.668,117.020],"山东":[36.668,117.020],"济南市":[36.668,117.020],"济南":[36.668,117.020],"青岛市":[36.066,120.383],"青岛":[36.066,120.383],"福建省":[26.100,119.296],"福建":[26.100,119.296],"福州市":[26.100,119.296],"福州":[26.100,119.296],"厦门市":[24.479,118.090],"厦门":[24.479,118.090],"安徽省":[31.820,117.228],"安徽":[31.820,117.228],"合肥市":[31.820,117.228],"合肥":[31.820,117.228],"河南省":[34.765,113.754],"河南":[34.765,113.754],"郑州市":[34.765,113.754],"郑州":[34.765,113.754],"陕西省":[34.263,108.948],"陕西":[34.263,108.948],"西安市":[34.263,108.948],"西安":[34.263,108.948],"河北省":[38.045,114.502],"河北":[38.045,114.502],"石家庄市":[38.045,114.502],"石家庄":[38.045,114.502],"辽宁省":[41.795,123.430],"辽宁":[41.795,123.430],"沈阳市":[41.795,123.430],"沈阳":[41.795,123.430],"大连市":[38.914,121.614],"大连":[38.914,121.614],"吉林省":[43.887,125.325],"长春市":[43.887,125.325],"长春":[43.887,125.325],"黑龙江省":[45.756,126.642],"黑龙江":[45.756,126.642],"哈尔滨市":[45.756,126.642],"哈尔滨":[45.756,126.642],"山西省":[37.873,112.549],"山西":[37.873,112.549],"太原市":[37.873,112.549],"太原":[37.873,112.549],"内蒙古自治区":[40.818,111.766],"内蒙古":[40.818,111.766],"呼和浩特":[40.818,111.766],"云南省":[24.880,102.832],"云南":[24.880,102.832],"昆明市":[24.880,102.832],"昆明":[24.880,102.832],"贵州省":[26.599,106.707],"贵州":[26.599,106.707],"贵阳市":[26.599,106.707],"贵阳":[26.599,106.707],"广西壮族自治区":[22.817,108.366],"广西":[22.817,108.366],"南宁市":[22.817,108.366],"南宁":[22.817,108.366],"海南省":[20.044,110.199],"海南":[20.044,110.199],"海口市":[20.044,110.199],"海口":[20.044,110.199],"江西省":[28.676,115.892],"江西":[28.676,115.892],"南昌市":[28.676,115.892],"南昌":[28.676,115.892],"香港特别行政区":[22.319,114.170],"香港":[22.319,114.170],"澳门特别行政区":[22.163,113.545],"澳门":[22.163,113.545],"台湾省":[25.033,121.565],"台湾":[25.033,121.565],"台北市":[25.033,121.565],"台北":[25.033,121.565],"美国":[37.090,-95.713],"纽约":[40.713,-74.006],"洛杉矶":[34.052,-118.244],"旧金山":[37.774,-122.419],"加拿大":[56.130,-106.347],"多伦多":[43.651,-79.347],"温哥华":[49.247,-123.116],"英国":[51.508,-0.128],"伦敦":[51.508,-0.128],"法国":[46.227,2.214],"巴黎":[48.857,2.347],"德国":[51.165,10.452],"柏林":[52.520,13.405],"日本":[36.205,138.252],"东京":[35.690,139.692],"大阪":[34.693,135.502],"韩国":[35.908,127.767],"首尔":[37.566,126.978],"澳大利亚":[-25.274,133.775],"悉尼":[-33.869,151.209],"墨尔本":[-37.814,144.963],"新加坡":[1.352,103.820],"马来西亚":[4.210,101.976],"吉隆坡":[3.140,101.687],"泰国":[15.870,100.993],"曼谷":[13.756,100.502]};
-function geocodeLocation(str){
-  if(!str) return null;
-  var keys=Object.keys(GEO_DICT).sort(function(a,b){return b.length-a.length;});
-  for(var i=0;i<keys.length;i++){if(str.includes(keys[i])) return{coords:GEO_DICT[keys[i]],label:keys[i]};}
-  return null;
-}
+var GD={"北京市":[39.905,116.391],"北京":[39.905,116.391],"上海市":[31.230,121.473],"上海":[31.230,121.473],"天津市":[39.125,117.190],"天津":[39.125,117.190],"重庆市":[29.563,106.551],"重庆":[29.563,106.551],"广东省":[23.130,113.264],"广东":[23.130,113.264],"广州市":[23.130,113.264],"广州":[23.130,113.264],"深圳市":[22.543,114.058],"深圳":[22.543,114.058],"东莞市":[23.020,113.751],"东莞":[23.020,113.751],"佛山市":[23.021,113.122],"佛山":[23.021,113.122],"浙江省":[30.274,120.155],"浙江":[30.274,120.155],"杭州市":[30.274,120.155],"杭州":[30.274,120.155],"宁波市":[29.868,121.544],"宁波":[29.868,121.544],"温州市":[28.000,120.672],"温州":[28.000,120.672],"江苏省":[32.061,118.796],"江苏":[32.061,118.796],"南京市":[32.061,118.796],"南京":[32.061,118.796],"苏州市":[31.298,120.585],"苏州":[31.298,120.585],"湖南省":[28.228,112.939],"湖南":[28.228,112.939],"长沙市":[28.228,112.939],"长沙":[28.228,112.939],"湖北省":[30.593,114.305],"湖北":[30.593,114.305],"武汉市":[30.593,114.305],"武汉":[30.593,114.305],"四川省":[30.659,104.065],"四川":[30.659,104.065],"成都市":[30.659,104.065],"成都":[30.659,104.065],"山东省":[36.668,117.020],"山东":[36.668,117.020],"济南市":[36.668,117.020],"济南":[36.668,117.020],"青岛市":[36.066,120.383],"青岛":[36.066,120.383],"福建省":[26.100,119.296],"福建":[26.100,119.296],"福州市":[26.100,119.296],"福州":[26.100,119.296],"厦门市":[24.479,118.090],"厦门":[24.479,118.090],"安徽省":[31.820,117.228],"安徽":[31.820,117.228],"合肥市":[31.820,117.228],"合肥":[31.820,117.228],"河南省":[34.765,113.754],"河南":[34.765,113.754],"郑州市":[34.765,113.754],"郑州":[34.765,113.754],"陕西省":[34.263,108.948],"陕西":[34.263,108.948],"西安市":[34.263,108.948],"西安":[34.263,108.948],"香港特别行政区":[22.319,114.170],"香港":[22.319,114.170],"澳门特别行政区":[22.163,113.545],"澳门":[22.163,113.545],"台湾省":[25.033,121.565],"台湾":[25.033,121.565],"美国":[37.090,-95.713],"纽约":[40.713,-74.006],"洛杉矶":[34.052,-118.244],"旧金山":[37.774,-122.419],"加拿大":[56.130,-106.347],"多伦多":[43.651,-79.347],"温哥华":[49.247,-123.116],"英国":[51.508,-0.128],"伦敦":[51.508,-0.128],"日本":[36.205,138.252],"东京":[35.690,139.692],"大阪":[34.693,135.502],"韩国":[35.908,127.767],"首尔":[37.566,126.978],"澳大利亚":[-25.274,133.775],"悉尼":[-33.869,151.209],"墨尔本":[-37.814,144.963],"新加坡":[1.352,103.820]};
+function geo(str){if(!str)return null;var ks=Object.keys(GD).sort(function(a,b){return b.length-a.length;});for(var i=0;i<ks.length;i++){if(str.includes(ks[i]))return{coords:GD[ks[i]],label:ks[i]};}return null;}
 function renderMap(){
-  if(!mapInitialized){
-    mapInstance=L.map('map-container',{center:[35,105],zoom:4});
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18}).addTo(mapInstance);
-    mapInitialized=true;
-  }
+  if(!mapInitialized){mapInstance=L.map('map-container',{center:[35,105],zoom:4});L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18}).addTo(mapInstance);mapInitialized=true;}
   setTimeout(function(){
     mapInstance.invalidateSize();
-    mapInstance.eachLayer(function(l){if(l instanceof L.CircleMarker||l instanceof L.Marker) mapInstance.removeLayer(l);});
-    var locMap={};
-    members.forEach(function(m){
-      if(!m.location) return;
-      var geo=geocodeLocation(m.location); if(!geo) return;
-      var key=geo.coords.join(',');
-      if(!locMap[key]) locMap[key]={coords:geo.coords,label:m.location,members:[]};
-      if(!locMap[key].members.find(function(x){return x.name===m.name;})) locMap[key].members.push({name:m.name,gen:m.gen||'',id:m.id});
+    mapInstance.eachLayer(function(l){if(l instanceof L.CircleMarker||l instanceof L.Marker)mapInstance.removeLayer(l);});
+    var lm={};
+    members.forEach(function(m){if(!m.location)return;var g=geo(m.location);if(!g)return;var k=g.coords.join(',');if(!lm[k])lm[k]={coords:g.coords,label:m.location,members:[]};if(!lm[k].members.find(function(x){return x.name===m.name;}))lm[k].members.push({name:m.name,gen:m.gen||'',id:m.id});});
+    var prov=new Set();
+    Object.values(lm).forEach(function(loc){
+      var tot=loc.members.length,rad=Math.min(8+tot*3,28);
+      var mk=L.circleMarker(loc.coords,{radius:rad,fillColor:'#2563eb',color:'white',weight:2,fillOpacity:0.85}).addTo(mapInstance);
+      if(tot>1){var ico=L.divIcon({html:'<div style="color:white;font-size:11px;font-weight:700;text-align:center;line-height:'+(rad*2)+'px;width:'+(rad*2)+'px;height:'+(rad*2)+'px">'+tot+'</div>',className:'',iconSize:[rad*2,rad*2],iconAnchor:[rad,rad]});L.marker(loc.coords,{icon:ico,interactive:false}).addTo(mapInstance);}
+      var rows=loc.members.map(function(mb){return '<div class="popup-member" data-id="'+mb.id+'">👤 '+mb.name+(mb.gen?'<span class="popup-badge">'+mb.gen+'</span>':'')+'</div>';}).join('');
+      mk.bindPopup('<div class="popup-title">📍 '+loc.label+'</div><div style="max-height:180px;overflow-y:auto">'+rows+'</div>',{maxWidth:240});
+      prov.add(loc.label.split(' ')[0]);
     });
-    var provinces=new Set();
-    Object.values(locMap).forEach(function(loc){
-      var total=loc.members.length;
-      var radius=Math.min(8+total*3,28);
-      var marker=L.circleMarker(loc.coords,{radius:radius,fillColor:'#2563eb',color:'white',weight:2,opacity:1,fillOpacity:0.85}).addTo(mapInstance);
-      if(total>1){var icon=L.divIcon({html:'<div style="color:white;font-size:11px;font-weight:700;text-align:center;line-height:'+(radius*2)+'px;width:'+(radius*2)+'px;height:'+(radius*2)+'px">'+total+'</div>',className:'',iconSize:[radius*2,radius*2],iconAnchor:[radius,radius]});L.marker(loc.coords,{icon:icon,interactive:false}).addTo(mapInstance);}
-      var rows=loc.members.map(function(mb){return '<div class="popup-member" onclick="openModal(\''+mb.id+'\')">👤 '+mb.name+(mb.gen?'<span class="popup-badge">'+mb.gen+'</span>':'')+'</div>';}).join('');
-      marker.bindPopup('<div class="popup-title">📍 '+loc.label+'</div><div style="max-height:180px;overflow-y:auto">'+rows+'</div>',{maxWidth:240});
-      provinces.add(loc.label.split(/\s/)[0]);
-    });
-    document.getElementById('map-stat-cities').textContent=Object.keys(locMap).length;
-    document.getElementById('map-stat-provinces').textContent=provinces.size;
-    var allCoords=Object.values(locMap).map(function(l){return l.coords;});
-    if(allCoords.length>0) mapInstance.fitBounds(allCoords,{padding:[40,40],maxZoom:8});
+    document.getElementById('map-stat-cities').textContent=Object.keys(lm).length;
+    document.getElementById('map-stat-provinces').textContent=prov.size;
+    var ac=Object.values(lm).map(function(l){return l.coords;});
+    if(ac.length)mapInstance.fitBounds(ac,{padding:[40,40],maxZoom:8});
   },120);
 }
+})();
 <\/script>
 </body>
-</html>`;
+</html>`);
+
+  return parts.join('');
 }
 
 // ── Connection diagnostics ──────────────────────────────
