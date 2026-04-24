@@ -1604,7 +1604,7 @@ function renderTree() {
   const NH  = 80;   // node height
   const GY  = 60;   // vertical gap between generations
   const GX  = 10;   // horizontal gap between siblings within same family
-  const FX  = 40;   // extra gap between different family branches (同世不同家庭)
+  const FX  = 50;   // gap BETWEEN sibling subtrees (inter-family)
   const SPG = 8;    // gap between member and spouse
 
   const pos = {};   // id → {x, y}
@@ -1664,64 +1664,88 @@ function renderTree() {
     return memberYCache[m.id] = maxY;
   }
 
-  // ── 第二步：递归分配 X 坐标（Y 由世代固定，不再传递）──
+  // ── FIXED layout(): returns true subtree width ──────────
+  // xStart = left edge of this subtree
+  // Returns: total pixel width consumed (primary + spouse + all descendants)
   function layout(m, xStart) {
     const sp = partnerOf[m.id];
-    const myChildren = (childrenOf[m.name] || []).filter(c => !sideSpouseIds.has(c.id));
-    const spChildren = sp ? (childrenOf[sp.name] || []).filter(c => !sideSpouseIds.has(c.id) && !myChildren.find(x=>x.id===c.id)) : [];
-    const children   = [...myChildren, ...spChildren];
-    const myW = NW + (sp ? SPG + NW : 0);
-    const y   = getMemberY(m) ?? 20;
-
-    // 男左女右：如果 primary 是女性而 side 是男性，交换绘制位置
     const spouseOnLeft = sp && m.gender === 'female' && sp.gender === 'male';
+    const coupleW = NW + (sp ? SPG + NW : 0);
 
-    let totalW;
+    const myChildren = (childrenOf[m.name] || []).filter(c => !sideSpouseIds.has(c.id));
+    const spChildren = sp ? (childrenOf[sp.name] || []).filter(c =>
+      !sideSpouseIds.has(c.id) && !myChildren.find(x => x.id === c.id)
+    ) : [];
+    const children = [...myChildren, ...spChildren];
+
+    const y = getMemberY(m) ?? 20;
+
     if (children.length === 0) {
-      pos[m.id] = { x: spouseOnLeft ? xStart + NW + SPG : xStart, y };
-      totalW = myW;
-    } else {
-      let cx = xStart, sumW = 0;
-      children.forEach((child, idx) => {
-        const cw = layout(child, cx);
-        if (idx < children.length - 1) {
-          // 相邻兄弟之间一律用 FX（每个兄弟都是独立小家庭，配偶也算在内）
-          const childSp = partnerOf[child.id];
-          const childRight = pos[child.id].x + NW + (childSp ? SPG + NW : 0);
-          cx = childRight + FX;
-          sumW = cx - xStart;
-        } else {
-          const childSp = partnerOf[child.id];
-          const childRight = pos[child.id] ? pos[child.id].x + NW + (childSp ? SPG + NW : 0) : cx + NW;
-          sumW = childRight - xStart;
-        }
-      });
-      const firstChildX    = pos[children[0].id].x;
-      const lastChild      = children[children.length - 1];
-      const lastChildSp    = partnerOf[lastChild.id];
-      const lastChildRight = pos[lastChild.id].x + NW + (lastChildSp ? SPG + NW : 0);
-      // 居中：primary+spouse 整体居中于所有孩子上方
-      const midX = (firstChildX + lastChildRight) / 2 - myW / 2;
-      pos[m.id] = { x: spouseOnLeft ? midX + NW + SPG : midX, y };
-      totalW = Math.max(sumW, myW);
+      // 叶节点：直接放在 xStart
+      const primaryX = spouseOnLeft ? xStart + NW + SPG : xStart;
+      pos[m.id] = { x: primaryX, y };
+      if (sp) {
+        const spX = spouseOnLeft ? xStart : xStart + NW + SPG;
+        pos[sp.id] = { x: spX, y: getMemberY(sp) ?? y };
+      }
+      return coupleW;
     }
 
-    // 配偶位置：男左女右
+    // 先递归布局所有子节点，记录各子树宽度
+    let cx = xStart;
+    children.forEach((child, idx) => {
+      const cw = layout(child, cx);
+      cx += cw;
+      if (idx < children.length - 1) cx += FX;
+    });
+    const childrenTotalW = cx - xStart;
+
+    // 把父母对居中于所有子女上方
+    const childrenMidX = xStart + childrenTotalW / 2;
+    let coupleLeft = childrenMidX - coupleW / 2;
+
+    // 如果夫妻对比子树起点还靠左，整体右移子树
+    if (coupleLeft < xStart) {
+      const shift = xStart - coupleLeft;
+      coupleLeft = xStart;
+      function shiftSubtree(member) {
+        if (pos[member.id]) pos[member.id].x += shift;
+        const sp2 = partnerOf[member.id];
+        if (sp2 && pos[sp2.id]) pos[sp2.id].x += shift;
+        const ck = (childrenOf[member.name] || []).filter(c => !sideSpouseIds.has(c.id));
+        ck.forEach(shiftSubtree);
+      }
+      children.forEach(shiftSubtree);
+    }
+
+    // 放置夫妻对
+    const primaryX = spouseOnLeft ? coupleLeft + NW + SPG : coupleLeft;
+    pos[m.id] = { x: primaryX, y };
     if (sp) {
-      const spX = spouseOnLeft ? pos[m.id].x - SPG - NW : pos[m.id].x + NW + SPG;
+      const spX = spouseOnLeft ? coupleLeft : coupleLeft + NW + SPG;
       pos[sp.id] = { x: spX, y: getMemberY(sp) ?? y };
     }
-    return Math.max(totalW, myW);
+
+    // 返回整棵子树实际占用宽度（递归计算右边界）
+    function subtreeRight(member) {
+      let r = pos[member.id] ? pos[member.id].x + NW : xStart;
+      const sp2 = partnerOf[member.id];
+      if (sp2 && pos[sp2.id]) r = Math.max(r, pos[sp2.id].x + NW);
+      const ck = (childrenOf[member.name] || []).filter(c => !sideSpouseIds.has(c.id));
+      ck.forEach(c => { r = Math.max(r, subtreeRight(c)); });
+      return r;
+    }
+    return subtreeRight(m) - xStart;
   }
 
-  // Layout each root tree horizontally
+  // Layout each root tree
   let rootX = 20;
   roots.forEach(r => {
     const w = layout(r, rootX);
     rootX += w + FX * 2;
   });
 
-  // SVG dimensions
+    // SVG dimensions
   let maxX = 0, maxY = 0;
   Object.values(pos).forEach(p => {
     maxX = Math.max(maxX, p.x + NW);
