@@ -4560,7 +4560,6 @@ ${leafletScriptBlock}`);
   // ── APP SCRIPT ────────────────────────────────────────────────────────────
   parts.push(`<script>
 (function() {
-"use strict";
 // Load snapshot data
 const SNAPSHOT = JSON.parse(document.getElementById('snapshot-data').textContent);
 let members   = SNAPSHOT.members  || [];
@@ -4852,20 +4851,41 @@ function renderTree(){
     for(var i=0;i<kd.length;i++){var ky=gy(kd[i],vis);if(ky!==null){var kg=gom[kd[i].id];if(kg&&kg<9000){var ki=agv.indexOf(kg);if(ki>0)return myc[m.id]=gym[agv[ki-1]];}return myc[m.id]=ky-(NH+GY);}}
     return myc[m.id]=agv.length>0?gym[agv[agv.length-1]]:20;
   }
+  function shiftTree(mb,sh,partnerOf,childrenOf,sideIds,pos,NW){
+    if(pos[mb.id])pos[mb.id].x+=sh;
+    var sp2=partnerOf[mb.id];
+    if(sp2&&pos[sp2.id])pos[sp2.id].x+=sh;
+    (childrenOf[mb.name]||[]).filter(function(c){return!sideIds.has(c.id);}).forEach(function(c){shiftTree(c,sh,partnerOf,childrenOf,sideIds,pos,NW);});
+  }
+  function subtreeRight(mb,partnerOf,childrenOf,sideIds,pos,NW,xS){
+    var r=pos[mb.id]?pos[mb.id].x+NW:xS;
+    var sp2=partnerOf[mb.id];
+    if(sp2&&pos[sp2.id])r=Math.max(r,pos[sp2.id].x+NW);
+    (childrenOf[mb.name]||[]).filter(function(c){return!sideIds.has(c.id);}).forEach(function(c){r=Math.max(r,subtreeRight(c,partnerOf,childrenOf,sideIds,pos,NW,xS));});
+    return r;
+  }
   function layout(m,xS){
     var sp=partnerOf[m.id],sol=sp&&m.gender==='female'&&sp.gender==='male',cW=NW+(sp?SPG+NW:0);
     var mK=(childrenOf[m.name]||[]).filter(function(c){return!sideIds.has(c.id);});
     var sK=sp?(childrenOf[sp.name]||[]).filter(function(c){return!sideIds.has(c.id)&&!mK.find(function(x){return x.id===c.id;});}):[];
     var ch=mK.concat(sK),y=gy(m)||20;
-    if(!ch.length){var pX=sol?xS+NW+SPG:xS;pos[m.id]={x:pX,y:y};if(sp){var sX=sol?xS:xS+NW+SPG;pos[sp.id]={x:sX,y:gy(sp)||y};}return cW;}
-    var cx=xS;ch.forEach(function(c,i){cx+=layout(c,cx);if(i<ch.length-1)cx+=FX;});
+    if(!ch.length){
+      var pX=sol?xS+NW+SPG:xS;
+      pos[m.id]={x:pX,y:y};
+      if(sp){pos[sp.id]={x:sol?xS:xS+NW+SPG,y:gy(sp)||y};}
+      return cW;
+    }
+    var cx=xS;
+    ch.forEach(function(c,i){cx+=layout(c,cx);if(i<ch.length-1)cx+=FX;});
     var cl=xS+(cx-xS)/2-cW/2;
-    if(cl<xS){var sh=xS-cl;cl=xS;(function ss(mb){if(pos[mb.id])pos[mb.id].x+=sh;var sp2=partnerOf[mb.id];if(sp2&&pos[sp2.id])pos[sp2.id].x+=sh;(childrenOf[mb.name]||[]).filter(function(c){return!sideIds.has(c.id);}).forEach(ss);})(function(){ch.forEach(function(c){(function ss(mb){if(pos[mb.id])pos[mb.id].x+=sh;var sp2=partnerOf[mb.id];if(sp2&&pos[sp2.id])pos[sp2.id].x+=sh;(childrenOf[mb.name]||[]).filter(function(c){return!sideIds.has(c.id);}).forEach(ss);})(c);});return ch[0];}());}
-    // simpler shift
-    if(cl<xS){var sh2=xS-cl;cl=xS;function ssub(mb){if(pos[mb.id])pos[mb.id].x+=sh2;var s2=partnerOf[mb.id];if(s2&&pos[s2.id])pos[s2.id].x+=sh2;(childrenOf[mb.name]||[]).filter(function(c){return!sideIds.has(c.id);}).forEach(ssub);}ch.forEach(ssub);}
-    var pX=sol?cl+NW+SPG:cl;pos[m.id]={x:pX,y:y};if(sp){pos[sp.id]={x:sol?cl:cl+NW+SPG,y:gy(sp)||y};}
-    function sr(mb){var r=pos[mb.id]?pos[mb.id].x+NW:xS;var s2=partnerOf[mb.id];if(s2&&pos[s2.id])r=Math.max(r,pos[s2.id].x+NW);(childrenOf[mb.name]||[]).filter(function(c){return!sideIds.has(c.id);}).forEach(function(c){r=Math.max(r,sr(c));});return r;}
-    return sr(m)-xS;
+    if(cl<xS){
+      var sh=xS-cl; cl=xS;
+      ch.forEach(function(c){shiftTree(c,sh,partnerOf,childrenOf,sideIds,pos,NW);});
+    }
+    var pX=sol?cl+NW+SPG:cl;
+    pos[m.id]={x:pX,y:y};
+    if(sp){pos[sp.id]={x:sol?cl:cl+NW+SPG,y:gy(sp)||y};}
+    return subtreeRight(m,partnerOf,childrenOf,sideIds,pos,NW,xS)-xS;
   }
   var rx=20;roots.forEach(function(r){rx+=layout(r,rx)+FX*2;});
   var mxX=0,mxY=0;Object.values(pos).forEach(function(p){mxX=Math.max(mxX,p.x+NW);mxY=Math.max(mxY,p.y+NH);});
